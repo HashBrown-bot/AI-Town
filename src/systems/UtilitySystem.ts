@@ -34,100 +34,142 @@ export function clampUtilityScore(val: number): number {
 
 /**
  * Calculates raw need score (0 - 100) for a specific candidate utility action
+ * Leverages physicalNeeds, psychologicalNeeds, socialNeeds, and cognitiveNeeds
  */
-export function calculateNeedScore(action: UtilityActionType, needs: AgentNeeds): { score: number; reason: string } {
+export function calculateNeedScore(
+  action: UtilityActionType, 
+  agentOrNeeds: Agent | AgentNeeds
+): { score: number; reason: string } {
+  // Extract or fallback
+  const isAgent = 'physicalNeeds' in agentOrNeeds || 'bigFive' in agentOrNeeds;
+  const agent = isAgent ? (agentOrNeeds as Agent) : undefined;
+  const flatNeeds = isAgent ? (agentOrNeeds as Agent).needs : (agentOrNeeds as AgentNeeds);
+  
+  const physical = agent?.physicalNeeds || {
+    energy: flatNeeds?.energy ?? 80,
+    hunger: flatNeeds?.hunger ?? 20,
+    health: flatNeeds?.health ?? 90,
+  };
+
+  const psychological = agent?.psychologicalNeeds || {
+    mood: flatNeeds?.mood ?? 70,
+    stress: flatNeeds?.stress ?? 20,
+    fun: flatNeeds?.fun ?? 55,
+    comfort: flatNeeds?.comfort ?? 75,
+  };
+
+  const social = agent?.socialNeeds || {
+    social: flatNeeds?.social ?? 70,
+    belonging: flatNeeds?.belonging ?? 75,
+  };
+
+  const cognitive = agent?.cognitiveNeeds || {
+    curiosity: flatNeeds?.curiosity ?? 60,
+    achievement: flatNeeds?.achievement ?? 60,
+  };
+
   switch (action) {
     case 'sleep': {
-      // Need surges as energy drops below 40, and slightly increases with stress
-      const fatigue = Math.max(0, 100 - needs.energy);
-      const score = fatigue > 50 ? fatigue * 1.05 : fatigue * 0.7;
+      // Need surges as energy drops below 40, and slightly increases with stress and low health
+      const fatigue = Math.max(0, 100 - physical.energy);
+      let score = fatigue > 45 ? fatigue * 1.15 : fatigue * 0.7;
+      if (psychological.stress > 65) score += 10;
+      if (physical.health < 50) score += 15;
       return { 
         score: clampUtilityScore(score),
-        reason: `精力储备剩余 ${needs.energy}% (疲惫指数: ${Math.round(fatigue)})`
+        reason: `精力储备剩余 ${Math.round(physical.energy)}% (疲惫负荷: ${Math.round(fatigue)}，健康: ${Math.round(physical.health)}%)`
       };
     }
 
     case 'eat': {
-      // Direct correlation with hunger
-      const hungerFactor = needs.hunger;
-      const score = hungerFactor > 50 ? hungerFactor * 1.1 : hungerFactor * 0.75;
+      // Direct correlation with hunger and drops comfort
+      const hungerFactor = physical.hunger;
+      const score = hungerFactor > 50 ? hungerFactor * 1.15 : hungerFactor * 0.75;
       return {
         score: clampUtilityScore(score),
-        reason: `饥饿度达到 ${needs.hunger}%`
+        reason: `生理饥饿度达到 ${Math.round(physical.hunger)}%`
       };
     }
 
     case 'work': {
-      // Driven by achievement, but throttled by low energy and excessive stress
-      let base = needs.achievement * 0.9;
-      if (needs.energy < 30) base *= 0.5;
-      if (needs.hunger > 70) base *= 0.6;
+      // Driven by achievement, but throttled by low energy and excessive stress/hunger
+      let base = cognitive.achievement * 0.95;
+      if (physical.energy < 30) base *= 0.45;
+      if (physical.hunger > 70) base *= 0.55;
+      if (psychological.stress > 80) base *= 0.6;
       return {
         score: clampUtilityScore(base),
-        reason: `进取与成就动机 ${needs.achievement}%`
+        reason: `进取与成就动机 ${Math.round(cognitive.achievement)}% (受精力/饥饿约束调节)`
       };
     }
 
     case 'socialize': {
-      // Driven by social craving and low belonging
-      const socialCraving = needs.social * 0.8 + (100 - needs.belonging) * 0.3;
+      // Driven by social craving (lower social satisfaction = higher craving) and low belonging
+      const socialDeficit = Math.max(0, 100 - social.social);
+      const belongingDeficit = Math.max(0, 100 - social.belonging);
+      const score = socialDeficit * 0.75 + belongingDeficit * 0.35;
       return {
-        score: clampUtilityScore(socialCraving),
-        reason: `社交渴求度 ${needs.social}%，社区归属感 ${needs.belonging}%`
+        score: clampUtilityScore(score),
+        reason: `社交充实度 ${Math.round(social.social)}%，归属感渴求 ${Math.round(belongingDeficit)}%`
       };
     }
 
     case 'explore': {
       // Driven by curiosity and fun
-      const score = needs.curiosity * 0.85 + needs.fun * 0.25;
+      const score = cognitive.curiosity * 0.85 + psychological.fun * 0.25;
       return {
         score: clampUtilityScore(score),
-        reason: `求知探索欲望 ${needs.curiosity}%`
+        reason: `求知探索欲望 ${Math.round(cognitive.curiosity)}% 与游历兴趣`
       };
     }
 
     case 'relax': {
-      // Driven by stress and low comfort
-      const stressNeed = needs.stress * 0.8 + (100 - needs.comfort) * 0.35 + needs.fun * 0.2;
+      // Driven by stress, low comfort, and low mood
+      const comfortDeficit = Math.max(0, 100 - psychological.comfort);
+      const moodDeficit = Math.max(0, 100 - psychological.mood);
+      const stressNeed = psychological.stress * 0.75 + comfortDeficit * 0.35 + moodDeficit * 0.2;
       return {
         score: clampUtilityScore(stressNeed),
-        reason: `心理压力负荷 ${needs.stress}%，舒适感 ${needs.comfort}%`
+        reason: `心理压力 ${Math.round(psychological.stress)}%，身心舒适度 ${Math.round(psychological.comfort)}%`
       };
     }
 
     case 'study': {
       // Academic focus: curiosity + achievement
-      const score = needs.curiosity * 0.7 + needs.achievement * 0.4;
+      const score = cognitive.curiosity * 0.7 + cognitive.achievement * 0.4;
       return {
         score: clampUtilityScore(score),
-        reason: `求知心 ${needs.curiosity}% 与学术进取心 ${needs.achievement}%`
+        reason: `求知心 ${Math.round(cognitive.curiosity)}% 与学术成就心 ${Math.round(cognitive.achievement)}%`
       };
     }
 
     case 'shop': {
       // Commerce and coffee/pastry leisure: hunger + fun + comfort
-      const score = needs.hunger * 0.45 + (100 - needs.comfort) * 0.35 + needs.fun * 0.3;
+      const comfortDeficit = Math.max(0, 100 - psychological.comfort);
+      const score = physical.hunger * 0.45 + comfortDeficit * 0.35 + psychological.fun * 0.3;
       return {
         score: clampUtilityScore(score),
-        reason: `糕点饮品补给欲与舒适放松心愿`
+        reason: `小憩采买欲与放松心愿`
       };
     }
 
     case 'seekHelp': {
-      // Extreme stress or very low safety/comfort
-      const urgency = needs.stress * 0.9 + (100 - needs.safety) * 0.3;
+      // Low health or extreme stress
+      const healthDeficit = Math.max(0, 100 - physical.health);
+      const urgency = psychological.stress * 0.65 + healthDeficit * 0.85;
       return {
         score: clampUtilityScore(urgency),
-        reason: `精神紧绷压力 ${needs.stress}%，安全秩序感 ${needs.safety}%`
+        reason: `生理健康 ${Math.round(physical.health)}%，心理紧绷度 ${Math.round(psychological.stress)}%`
       };
     }
 
     case 'attendEvent': {
-      // Community participation: fun + social + belonging
-      const score = needs.fun * 0.5 + needs.social * 0.4 + (100 - needs.belonging) * 0.4;
+      // Community participation: fun + belonging deficit
+      const belongingDeficit = Math.max(0, 100 - social.belonging);
+      const score = psychological.fun * 0.5 + (100 - social.social) * 0.3 + belongingDeficit * 0.4;
       return {
         score: clampUtilityScore(score),
-        reason: `社区归属呼唤 ${needs.belonging}% 与集体活动趣味`
+        reason: `社区融入愿景 ${Math.round(social.belonging)}% 与集体集会趣味`
       };
     }
   }
@@ -266,13 +308,14 @@ export function calculateRelationshipModifier(
 }
 
 /**
- * Calculates environmental affordance and weather modifier (0.7 - 1.4)
+ * Calculates environmental affordance and weather modifier (0.65 - 1.45)
  */
 export function calculateEnvironmentModifier(
   action: UtilityActionType,
   currentBuilding?: Building,
   weather?: string,
-  events: TownEvent[] = []
+  events: TownEvent[] = [],
+  agent?: Agent
 ): number {
   let mod = 1.0;
 
@@ -282,26 +325,43 @@ export function calculateEnvironmentModifier(
     mod *= 1.4;
   }
 
-  // Weather influences outdoor vs indoor actions
-  if (weather === 'thunderstorm' || weather === 'overcast_rain') {
-    if (action === 'relax' || action === 'explore') mod *= 0.7; // Avoid outdoor wandering
-    if (action === 'study' || action === 'sleep' || action === 'shop') mod *= 1.25; // Favor cozy indoors
+  // Weather influences: Rain / Storm / Sunshine
+  const isRain = weather === 'thunderstorm' || weather === 'overcast_rain' || weather === 'rain';
+  const openness = agent?.bigFive?.openness ?? 50;
+
+  if (isRain) {
+    if (openness >= 68) {
+      // 高开放性居民雨天富有诗意灵感与思索，更享受静处漫步或研读
+      if (action === 'relax' || action === 'explore') mod *= 1.15;
+      if (action === 'study' || action === 'shop') mod *= 1.25;
+    } else {
+      // 常规居民避免外出淋雨，偏好室内避雨休憩
+      if (action === 'relax' || action === 'explore') mod *= 0.65;
+      if (action === 'study' || action === 'sleep' || action === 'shop') mod *= 1.25;
+    }
   } else if (weather === 'golden_sunset' || weather === 'starry_night') {
     if (action === 'relax' || action === 'explore') mod *= 1.25;
+  }
+
+  // Nighttime effect (circadian urge to sleep & return to shelter)
+  const isNight = weather?.includes('night') || agent?.activeConditionTags?.includes('🌙 夜幕渐深');
+  if (isNight) {
+    if (action === 'sleep') mod *= 1.45;
+    if (action === 'work' || action === 'explore') mod *= 0.75;
   }
 
   // Current building affordance: if agent is already at the relevant building, reduce travel friction
   if (currentBuilding) {
     if (action === 'eat' && (currentBuilding.id === 'bakery' || currentBuilding.id === 'cafe')) mod *= 1.2;
-    if (action === 'sleep' && currentBuilding.id === 'clinic') mod *= 1.2;
+    if (action === 'sleep' && (currentBuilding.id === 'clinic' || currentBuilding.id === 'cottages')) mod *= 1.25;
     if (action === 'study' && currentBuilding.id === 'library') mod *= 1.25;
     if (action === 'explore' && currentBuilding.id === 'observatory') mod *= 1.25;
     if (action === 'relax' && currentBuilding.id === 'central_park') mod *= 1.2;
     if (action === 'shop' && currentBuilding.id === 'cafe') mod *= 1.2;
-    if (action === 'seekHelp' && currentBuilding.id === 'clinic') mod *= 1.3;
+    if (action === 'seekHelp' && currentBuilding.id === 'clinic') mod *= 1.35;
   }
 
-  return Math.min(1.4, Math.max(0.7, Number(mod.toFixed(2))));
+  return Math.min(1.45, Math.max(0.65, Number(mod.toFixed(2))));
 }
 
 /**
@@ -352,7 +412,6 @@ export function evaluateAgentUtilityActions(
   weather?: string,
   events: TownEvent[] = []
 ): { topAction: UtilityActionScore; allScores: UtilityActionScore[] } {
-  const needs = agent.needs;
   const actionsList: UtilityActionType[] = [
     'sleep',
     'eat',
@@ -368,11 +427,11 @@ export function evaluateAgentUtilityActions(
 
   const evaluations: UtilityActionScore[] = actionsList.map(act => {
     const meta = UTILITY_ACTIONS_META[act];
-    const { score: needScore, reason: needReason } = calculateNeedScore(act, needs);
+    const { score: needScore, reason: needReason } = calculateNeedScore(act, agent);
     const personalityMod = calculatePersonalityModifier(act, agent.bigFive, agent.mbti);
     const goalMod = calculateGoalModifier(act, agent.goal);
     const { modifier: relMod, targetAgent } = calculateRelationshipModifier(act, agent, otherAgents);
-    const envMod = calculateEnvironmentModifier(act, currentBuilding, weather, events);
+    const envMod = calculateEnvironmentModifier(act, currentBuilding, weather, events, agent);
     const memMod = calculateMemoryModifier(act, agent);
 
     // Controlled small randomness (0.95 - 1.05) to break strict ties and prevent robotic rigidity

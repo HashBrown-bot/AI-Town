@@ -133,21 +133,43 @@ export const AgentPersonaStudio: React.FC<AgentPersonaStudioProps> = ({
         quirks: quirksArray,
         state: {
           energy: 85,
-          mood: 70,
-          stress: 20,
+          mood: 75,
+          stress: 18,
           sociability: 75
         },
+        physicalNeeds: {
+          energy: 85,
+          hunger: 20,
+          health: 92,
+        },
+        psychologicalNeeds: {
+          mood: 75,
+          stress: 18,
+          fun: 60,
+          comfort: 80,
+        },
+        socialNeeds: {
+          social: 70,
+          belonging: 75,
+        },
+        cognitiveNeeds: {
+          curiosity: 65,
+          achievement: 60,
+        },
+        activeConditionTags: ['✨ 身心饱满'],
         needs: {
           energy: 85,
           hunger: 20,
-          social: 40,
-          fun: 35,
+          health: 92,
+          social: 70,
+          fun: 60,
           comfort: 80,
           curiosity: 65,
           safety: 85,
-          belonging: 70,
+          belonging: 75,
           achievement: 60,
-          stress: 20
+          stress: 18,
+          mood: 75
         },
         currentActivity: `在小镇漫步了解环境`,
         currentThought: `这里的空气真清新，希望能尽快融入大家。`,

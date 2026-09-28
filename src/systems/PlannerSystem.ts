@@ -135,10 +135,11 @@ export function planGoalActions(
         progress: 0,
         status: 'pending',
         feedbackEffects: {
-          social: -50,
+          social: 40,
           belonging: 25,
-          stress: -15,
-          fun: -15,
+          stress: -20,
+          fun: 20,
+          mood: 20,
         },
       });
       steps.push({
@@ -249,10 +250,11 @@ export function planGoalActions(
           progress: 0,
           status: 'pending',
           feedbackEffects: {
-            achievement: -45,
+            achievement: 35,
+            mood: 22,
             safety: 20,
-            stress: -10,
-            energy: -15,
+            stress: -8,
+            energy: -12,
           },
         });
       } else {
@@ -288,10 +290,10 @@ export function planGoalActions(
           progress: 0,
           status: 'pending',
           feedbackEffects: {
-            achievement: -50,
-            curiosity: -15,
+            achievement: 40,
+            mood: 25,
             belonging: 15,
-            energy: -15,
+            energy: -14,
             hunger: 12,
           },
         });

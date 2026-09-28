@@ -69,9 +69,37 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
   const topUtility = utilityScores[0];
   const inspectingAction = utilityScores.find(u => u.action === selectedUtilityAction) || topUtility;
 
-  // Configuration for 10 needs meters
+  // Resolve 4 structured need dimensions
+  const physical = agent.physicalNeeds || {
+    energy: needs.energy ?? 80,
+    hunger: needs.hunger ?? 20,
+    health: needs.health ?? 90,
+  };
+
+  const psychological = agent.psychologicalNeeds || {
+    mood: needs.mood ?? (agent.state.mood < 0 ? (agent.state.mood + 100) / 2 : agent.state.mood) ?? 75,
+    stress: needs.stress ?? agent.state.stress ?? 18,
+    fun: needs.fun ?? 55,
+    comfort: needs.comfort ?? 80,
+  };
+
+  const social = agent.socialNeeds || {
+    social: needs.social ?? agent.state.sociability ?? 70,
+    belonging: needs.belonging ?? 75,
+  };
+
+  const cognitive = agent.cognitiveNeeds || {
+    curiosity: needs.curiosity ?? 65,
+    achievement: needs.achievement ?? 60,
+  };
+
+  const conditionTags = agent.activeConditionTags || [];
+
+  // Configuration for 4-dimension needs meters
   const needsConfig: {
-    key: keyof AgentNeeds;
+    key: string;
+    dimension: 'physical' | 'psychological' | 'social' | 'cognitive';
+    dimensionName: string;
     name: string;
     icon: string;
     value: number;
@@ -79,95 +107,133 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
     bgColor: string;
     traitNote: string;
   }[] = [
+    // 1. 生理需求 (Physical Needs)
     {
       key: 'energy',
-      name: '精力 (Energy)',
+      dimension: 'physical',
+      dimensionName: '生理状态 (Physical)',
+      name: '精力储备 (Energy)',
       icon: '⚡',
-      value: needs.energy,
+      value: Math.round(physical.energy),
       color: 'bg-amber-400',
       bgColor: 'text-amber-400',
-      traitNote: '自然消耗，闭目深睡或热咖啡恢复'
+      traitNote: '自然消耗，夜间加速耗损；深睡休憩或热咖啡恢复'
     },
     {
       key: 'hunger',
-      name: '饥饿 (Hunger)',
+      dimension: 'physical',
+      dimensionName: '生理状态 (Physical)',
+      name: '饥饿渴求 (Hunger)',
       icon: '🍞',
-      value: needs.hunger,
+      value: Math.round(physical.hunger),
       color: 'bg-orange-400',
       bgColor: 'text-orange-400',
-      traitNote: '随时间增长，前往面包房/咖啡馆进餐补充'
+      traitNote: '随时间增长；长期过高会拉低心情并引发健康损耗'
     },
     {
-      key: 'social',
-      name: '社交渴求 (Social)',
-      icon: '💬',
-      value: needs.social,
-      color: 'bg-blue-400',
-      bgColor: 'text-blue-400',
-      traitNote: `外向性(${agent.bigFive?.extraversion || 50}%)加剧独处时社交渴望`
-    },
-    {
-      key: 'fun',
-      name: '趣味休闲 (Fun)',
-      icon: '🎪',
-      value: needs.fun,
-      color: 'bg-pink-400',
-      bgColor: 'text-pink-400',
-      traitNote: '渴望喷泉散心、听诗琴演奏或观鸽'
-    },
-    {
-      key: 'curiosity',
-      name: '求知探索 (Curiosity)',
-      icon: '🔍',
-      value: needs.curiosity,
-      color: 'bg-purple-400',
-      bgColor: 'text-purple-400',
-      traitNote: `开放性(${agent.bigFive?.openness || 50}%)驱动对古籍与星仪探索`
-    },
-    {
-      key: 'achievement',
-      name: '成就进取 (Achievement)',
-      icon: '🏆',
-      value: needs.achievement,
-      color: 'bg-indigo-400',
-      bgColor: 'text-indigo-400',
-      traitNote: `尽责性(${agent.bigFive?.conscientiousness || 50}%)驱动岗位职责专注`
-    },
-    {
-      key: 'comfort',
-      name: '舒适度 (Comfort)',
-      icon: '🛋️',
-      value: needs.comfort,
+      key: 'health',
+      dimension: 'physical',
+      dimensionName: '生理状态 (Physical)',
+      name: '生理健康 (Health)',
+      icon: '🌿',
+      value: Math.round(physical.health),
       color: 'bg-emerald-400',
       bgColor: 'text-emerald-400',
-      traitNote: '环境安适与热茶能快速提升'
+      traitNote: '极度饥饿/过度疲劳或暴风雨淋雨损耗；就医与饱食休养愈合'
     },
+
+    // 2. 心理需求 (Psychological Needs)
     {
-      key: 'safety',
-      name: '安全感 (Safety)',
-      icon: '🛡️',
-      value: needs.safety,
-      color: 'bg-teal-400',
-      bgColor: 'text-teal-400',
-      traitNote: '靠近市政厅或信任伙伴同行时更安心'
-    },
-    {
-      key: 'belonging',
-      name: '社区归属 (Belonging)',
-      icon: '🤝',
-      value: needs.belonging,
-      color: 'bg-cyan-400',
-      bgColor: 'text-cyan-400',
-      traitNote: `宜人性(${agent.bigFive?.agreeableness || 50}%)重视睦邻合作`
+      key: 'mood',
+      dimension: 'psychological',
+      dimensionName: '心理状态 (Psychological)',
+      name: '情绪愉悦 (Mood)',
+      icon: '😊',
+      value: Math.round(psychological.mood),
+      color: 'bg-emerald-400',
+      bgColor: 'text-emerald-300',
+      traitNote: '良好社交与成就完成时提升；受疲饿与冲突抑制'
     },
     {
       key: 'stress',
+      dimension: 'psychological',
+      dimensionName: '心理状态 (Psychological)',
       name: '压力负荷 (Stress)',
       icon: '⚠️',
-      value: needs.stress,
-      color: needs.stress > 50 ? 'bg-rose-500' : 'bg-rose-400',
+      value: Math.round(psychological.stress),
+      color: psychological.stress > 50 ? 'bg-rose-500' : 'bg-rose-400',
       bgColor: 'text-rose-400',
-      traitNote: `情绪敏感(${agent.bigFive?.neuroticism || 30}%)在疲饿时放大焦虑`
+      traitNote: `情绪敏感(${agent.bigFive?.neuroticism || 30}%)在疲饿或冲突时放大焦虑`
+    },
+    {
+      key: 'fun',
+      dimension: 'psychological',
+      dimensionName: '心理状态 (Psychological)',
+      name: '趣味休闲 (Fun)',
+      icon: '🎪',
+      value: Math.round(psychological.fun),
+      color: 'bg-pink-400',
+      bgColor: 'text-pink-400',
+      traitNote: '喷泉散心、听诗琴演奏或观星能有效补充'
+    },
+    {
+      key: 'comfort',
+      dimension: 'psychological',
+      dimensionName: '心理状态 (Psychological)',
+      name: '身心舒适 (Comfort)',
+      icon: '🛋️',
+      value: Math.round(psychological.comfort),
+      color: 'bg-teal-400',
+      bgColor: 'text-teal-400',
+      traitNote: '环境安适与热茶温饮快速提升，恶劣天气外出下降'
+    },
+
+    // 3. 社交需求 (Social Needs)
+    {
+      key: 'social',
+      dimension: 'social',
+      dimensionName: '社交状态 (Social)',
+      name: '社交充实 (Social)',
+      icon: '💬',
+      value: Math.round(social.social),
+      color: 'bg-blue-400',
+      bgColor: 'text-blue-400',
+      traitNote: `外向性(${agent.bigFive?.extraversion || 50}%)加剧独处时社交渴望；倾谈交流时恢复`
+    },
+    {
+      key: 'belonging',
+      dimension: 'social',
+      dimensionName: '社交状态 (Social)',
+      name: '社区归属 (Belonging)',
+      icon: '🤝',
+      value: Math.round(social.belonging),
+      color: 'bg-cyan-400',
+      bgColor: 'text-cyan-400',
+      traitNote: `宜人性(${agent.bigFive?.agreeableness || 50}%)重视睦邻合作；良好社交激增`
+    },
+
+    // 4. 认知需求 (Cognitive Needs)
+    {
+      key: 'curiosity',
+      dimension: 'cognitive',
+      dimensionName: '认知状态 (Cognitive)',
+      name: '求知探索 (Curiosity)',
+      icon: '🔍',
+      value: Math.round(cognitive.curiosity),
+      color: 'bg-purple-400',
+      bgColor: 'text-purple-400',
+      traitNote: `开放性(${agent.bigFive?.openness || 50}%)驱动对古籍、仪器与未知探索`
+    },
+    {
+      key: 'achievement',
+      dimension: 'cognitive',
+      dimensionName: '认知状态 (Cognitive)',
+      name: '胜任成就 (Achievement)',
+      icon: '🏆',
+      value: Math.round(cognitive.achievement),
+      color: 'bg-indigo-400',
+      bgColor: 'text-indigo-400',
+      traitNote: `尽责性(${agent.bigFive?.conscientiousness || 50}%)驱动职业建树；工作完成显著增加`
     }
   ];
 
@@ -465,26 +531,48 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
         </div>
       </div>
 
-      {/* Deep Dive: 10 Needs Monitor & Multi-Step Execution Pipeline */}
+      {/* Deep Dive: 4-Dimension Needs Monitor & Multi-Step Execution Pipeline */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: 10 Needs Bars (5 Cols) */}
+        {/* Left Column: 4-Dimension Needs (5 Cols) */}
         <div className="lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between pb-1 border-b border-slate-800">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-amber-400" />
-              <span>10 项内在需求实时监测 (0-100)</span>
+              <span>居民四维状态与心理系统监测 (0-100)</span>
             </h4>
-            <span className="text-[10px] font-mono text-slate-500">数值越适宜越健康</span>
+            <span className="text-[10px] font-mono text-slate-500">动态联动驱动</span>
           </div>
 
-          <div className="space-y-2.5">
+          {/* Active condition tags */}
+          {conditionTags.length > 0 && (
+            <div className="p-2.5 rounded-xl bg-slate-950/80 border border-indigo-950/80 space-y-1">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                当前活跃联动状态 (Condition Badges):
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {conditionTags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/50 shadow-xs"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
             {needsConfig.map(need => (
               <div key={need.key} className="p-2 rounded-xl bg-slate-950/60 border border-slate-800/60 space-y-1 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-medium text-slate-300 text-[11px]">
+                  <div className="flex items-center gap-1.5 font-medium text-slate-300 text-[11px]">
                     <span>{need.icon}</span>
                     <span>{need.name}</span>
-                  </span>
+                    <span className="text-[9px] px-1 rounded bg-slate-800/80 text-slate-400 font-mono">
+                      {need.dimensionName.split(' ')[0]}
+                    </span>
+                  </div>
                   <span className={`font-mono font-bold ${need.bgColor}`}>
                     {need.value}%
                   </span>

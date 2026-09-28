@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
 import { Agent, Building } from '../types/town';
-import { X, MessageSquare, TrendingUp, Sparkles, MapPin, Battery, Smile, AlertCircle, Target, Compass, Footprints, Flame, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  X, 
+  MessageSquare, 
+  TrendingUp, 
+  Target, 
+  Footprints, 
+  ChevronDown, 
+  ChevronUp, 
+  Activity, 
+  Heart, 
+  Brain, 
+  Users, 
+  Lightbulb,
+  Sparkles,
+  Zap
+} from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
 interface AgentDetailModalProps {
@@ -19,13 +34,41 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   onForceInteraction
 }) => {
   const [showAllScores, setShowAllScores] = useState<boolean>(false);
+  const [needsViewMode, setNeedsViewMode] = useState<'four_dimensions' | 'compact'>('four_dimensions');
+
   if (!agent) return null;
 
   const currentAction = agent.plan?.steps[agent.plan.currentStepIndex] || agent.currentAction;
   const currentGoal = agent.goal;
 
+  // Resolve structured needs with graceful fallback
+  const physical = agent.physicalNeeds || {
+    energy: agent.needs?.energy ?? agent.state?.energy ?? 80,
+    hunger: agent.needs?.hunger ?? 20,
+    health: agent.needs?.health ?? 90,
+  };
+
+  const psychological = agent.psychologicalNeeds || {
+    mood: agent.needs?.mood ?? (agent.state?.mood < 0 ? (agent.state.mood + 100) / 2 : agent.state.mood) ?? 75,
+    stress: agent.needs?.stress ?? agent.state?.stress ?? 18,
+    fun: agent.needs?.fun ?? 55,
+    comfort: agent.needs?.comfort ?? 80,
+  };
+
+  const social = agent.socialNeeds || {
+    social: agent.needs?.social ?? agent.state?.sociability ?? 70,
+    belonging: agent.needs?.belonging ?? 75,
+  };
+
+  const cognitive = agent.cognitiveNeeds || {
+    curiosity: agent.needs?.curiosity ?? 65,
+    achievement: agent.needs?.achievement ?? 60,
+  };
+
+  const conditionTags = agent.activeConditionTags || [];
+
   return (
-    <div className="absolute top-16 left-6 z-20 w-88 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-5 shadow-2xl text-slate-100 animate-fadeIn max-h-[85vh] overflow-y-auto no-scrollbar">
+    <div className="absolute top-16 left-6 z-20 w-96 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-5 shadow-2xl text-slate-100 animate-fadeIn max-h-[88vh] overflow-y-auto no-scrollbar">
       {/* Header */}
       <div className="flex items-start justify-between pb-3 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -38,7 +81,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm text-white">{agent.name}</h3>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-semibold">
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30">
                 {agent.mbti}
               </span>
             </div>
@@ -59,6 +102,20 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
 
       {/* Autonomous Decision System Showcase (Needs -> Goal -> Plan -> Action) */}
       <div className="py-3 space-y-3 text-xs">
+        {/* Active Condition Badges (Dynamic Linkages) */}
+        {conditionTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {conditionTags.map((tag, idx) => (
+              <span 
+                key={idx} 
+                className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-950/80 text-indigo-300 border border-indigo-700/40 shadow-xs flex items-center gap-1"
+              >
+                <span>{tag}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Active Goal & Utility AI Choice */}
         {currentGoal && (
           <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/50 to-indigo-950/50 border border-blue-800/40 space-y-1.5">
@@ -111,9 +168,9 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                     </div>
                   </div>
                   {showAllScores && (
-                    <div className="text-[9px] text-slate-500 font-mono flex items-center justify-between pt-0.5 px-0.5">
-                      <span className="truncate pr-1">需:{u.factors.needScore} · 特:×{u.factors.personalityModifier} · 目:×{u.factors.goalModifier}</span>
-                      <span className="text-slate-400 shrink-0">×{u.factors.relationshipModifier}</span>
+                    <div className="text-[9px] text-slate-400 font-mono pt-0.5 px-0.5 leading-tight">
+                      <div className="text-slate-300 truncate">{u.reason}</div>
+                      <div className="text-slate-500">基础:{u.factors.needScore} · 特质:×{u.factors.personalityModifier} · 目标:×{u.factors.goalModifier} · 社交:×{u.factors.relationshipModifier} · 环境:×{u.factors.environmentModifier}</div>
                     </div>
                   )}
                 </div>
@@ -157,57 +214,228 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           "{agent.currentThought}"
         </div>
 
-        {/* 10 Needs Mini Dashboard */}
-        {agent.needs && (
-          <div className="space-y-1.5 pt-1">
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-              <span>内在需求状态 (Needs)</span>
-              <span className="text-[9px] font-mono text-slate-500">性格动态调制</span>
+        {/* 4-Dimension Needs & Psychological State System */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+            <span className="flex items-center gap-1 text-slate-300">
+              <Activity className="w-3 h-3 text-indigo-400" />
+              <span>居民四维需求与心理系统</span>
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setNeedsViewMode(needsViewMode === 'four_dimensions' ? 'compact' : 'four_dimensions')}
+                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              >
+                {needsViewMode === 'four_dimensions' ? '简略视图' : '四维矩阵'}
+              </button>
             </div>
+          </div>
 
+          {needsViewMode === 'compact' ? (
+            /* Compact Mode (4 Primary Meters) */
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
               <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                 <div className="flex justify-between text-slate-400">
                   <span>⚡ 精力 (Energy)</span>
-                  <span className="text-amber-400 font-bold">{agent.needs.energy}%</span>
+                  <span className="text-amber-400 font-bold">{Math.round(physical.energy)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-amber-400 h-full" style={{ width: `${agent.needs.energy}%` }} />
+                  <div className="bg-amber-400 h-full" style={{ width: `${physical.energy}%` }} />
                 </div>
               </div>
 
               <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                 <div className="flex justify-between text-slate-400">
                   <span>🍞 饥饿 (Hunger)</span>
-                  <span className="text-orange-400 font-bold">{agent.needs.hunger}%</span>
+                  <span className="text-orange-400 font-bold">{Math.round(physical.hunger)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-orange-400 h-full" style={{ width: `${agent.needs.hunger}%` }} />
+                  <div className="bg-orange-400 h-full" style={{ width: `${physical.hunger}%` }} />
                 </div>
               </div>
 
               <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                 <div className="flex justify-between text-slate-400">
-                  <span>💬 社交渴求 (Social)</span>
-                  <span className="text-blue-400 font-bold">{agent.needs.social}%</span>
+                  <span>💬 社交 (Social)</span>
+                  <span className="text-blue-400 font-bold">{Math.round(social.social)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-blue-400 h-full" style={{ width: `${agent.needs.social}%` }} />
+                  <div className="bg-blue-400 h-full" style={{ width: `${social.social}%` }} />
                 </div>
               </div>
 
               <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                 <div className="flex justify-between text-slate-400">
-                  <span>🔍 求知探索 (Curiosity)</span>
-                  <span className="text-purple-400 font-bold">{agent.needs.curiosity}%</span>
+                  <span>🔍 求知 (Curiosity)</span>
+                  <span className="text-purple-400 font-bold">{Math.round(cognitive.curiosity)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-purple-400 h-full" style={{ width: `${agent.needs.curiosity}%` }} />
+                  <div className="bg-purple-400 h-full" style={{ width: `${cognitive.curiosity}%` }} />
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          ) : (
+            /* 4-Dimension Rich Matrix View */
+            <div className="space-y-2 text-[10px]">
+              {/* 1. Physical Needs */}
+              <div className="p-2 rounded-xl bg-slate-950/60 border border-amber-950/40 space-y-1.5">
+                <div className="flex items-center justify-between text-amber-400 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3 h-3 text-amber-400" />
+                    <span>生理状态 (Physical)</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400">健康联动</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 font-mono">
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>⚡精力</span>
+                      <span className="text-amber-400 font-bold">{Math.round(physical.energy)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-amber-400 h-full" style={{ width: `${physical.energy}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>🍞饥饿</span>
+                      <span className="text-orange-400 font-bold">{Math.round(physical.hunger)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-orange-400 h-full" style={{ width: `${physical.hunger}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>🌿健康</span>
+                      <span className="text-emerald-400 font-bold">{Math.round(physical.health)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-emerald-400 h-full" style={{ width: `${physical.health}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Psychological Needs */}
+              <div className="p-2 rounded-xl bg-slate-950/60 border border-rose-950/40 space-y-1.5">
+                <div className="flex items-center justify-between text-rose-400 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Brain className="w-3 h-3 text-rose-400" />
+                    <span>心理状态 (Psychological)</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400">情绪与压力</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 font-mono">
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>😊心情</span>
+                      <span className="text-emerald-300 font-bold">{Math.round(psychological.mood)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-emerald-400 h-full" style={{ width: `${psychological.mood}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>⚠️压力</span>
+                      <span className={`font-bold ${psychological.stress > 50 ? 'text-rose-400' : 'text-slate-300'}`}>{Math.round(psychological.stress)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className={`h-full ${psychological.stress > 50 ? 'bg-rose-500' : 'bg-blue-400'}`} style={{ width: `${psychological.stress}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>🎪趣味</span>
+                      <span className="text-pink-400 font-bold">{Math.round(psychological.fun)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-pink-400 h-full" style={{ width: `${psychological.fun}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>🛋️舒适</span>
+                      <span className="text-teal-400 font-bold">{Math.round(psychological.comfort)}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-teal-400 h-full" style={{ width: `${psychological.comfort}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Social & Cognitive Needs */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Social Needs */}
+                <div className="p-2 rounded-xl bg-slate-950/60 border border-blue-950/40 space-y-1.5">
+                  <div className="flex items-center justify-between text-blue-400 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3 text-blue-400" />
+                      <span>社交 (Social)</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1 font-mono">
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-400">
+                        <span>💬社交充实</span>
+                        <span className="text-blue-400 font-bold">{Math.round(social.social)}</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-blue-400 h-full" style={{ width: `${social.social}%` }} />
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-400">
+                        <span>🤝归属认同</span>
+                        <span className="text-cyan-400 font-bold">{Math.round(social.belonging)}</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-cyan-400 h-full" style={{ width: `${social.belonging}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cognitive Needs */}
+                <div className="p-2 rounded-xl bg-slate-950/60 border border-purple-950/40 space-y-1.5">
+                  <div className="flex items-center justify-between text-purple-400 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Lightbulb className="w-3 h-3 text-purple-400" />
+                      <span>认知 (Cognitive)</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1 font-mono">
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-400">
+                        <span>🔍求知探索</span>
+                        <span className="text-purple-400 font-bold">{Math.round(cognitive.curiosity)}</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-purple-400 h-full" style={{ width: `${cognitive.curiosity}%` }} />
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-400">
+                        <span>🏆胜任成就</span>
+                        <span className="text-indigo-400 font-bold">{Math.round(cognitive.achievement)}</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-indigo-400 h-full" style={{ width: `${cognitive.achievement}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer Buttons */}
@@ -225,10 +453,9 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           className="flex-1 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition flex items-center justify-center gap-1.5 shadow"
         >
           <TrendingUp className="w-3.5 h-3.5" />
-          <span>决策与记忆全貌</span>
+          <span>四维演化与记忆全貌</span>
         </button>
       </div>
     </div>
   );
 };
-

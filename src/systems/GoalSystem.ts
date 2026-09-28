@@ -32,12 +32,12 @@ export function mapUtilityToGoal(
 
   switch (topUtility.action) {
     case 'sleep': {
-      const restSpot = findBuilding(buildings, 'clinic') || findBuilding(buildings, 'central_park') || buildings[0];
+      const restSpot = findBuilding(buildings, 'cottages') || findBuilding(buildings, 'clinic') || buildings[0];
       return {
         id: `goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: 'rest',
-        title: '寻找静谧场所闭目休憩安歇',
-        description: `${agent.name} 感到身体与意识极度疲惫，按 Utility AI 决策前往静处休憩恢复精力。`,
+        title: '返回温馨木屋寓所闭目安歇深睡',
+        description: `${agent.name} 感到身心疲惫，按 Utility AI 决策返回寓所静歇，恢复充沛精力。`,
         motivation: `Utility 评分 ${topUtility.score} 分: ${topUtility.reason}`,
         dominantNeed: 'energy',
         urgency,

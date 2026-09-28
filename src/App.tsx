@@ -44,7 +44,7 @@ import {
   consolidateAndPruneMemories, 
   applyReflectionToAgent 
 } from './services/memorySystem';
-import { tickAgentAutonomousBehavior } from './systems';
+import { tickAgentAutonomousBehavior, applyDialogueOutcomeToNeeds } from './systems';
 import { soundEngine } from './utils/audioSystem';
 
 // Local Storage Keys for Instant Zero-Flash Hydration
@@ -676,11 +676,11 @@ export default function App() {
           if (a.id === agentA.id) {
             const currentAffinity = a.affinity?.[agentB.id] || 0;
             const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaAtoB));
-            const newMood = Math.max(-100, Math.min(100, a.state.mood + Math.round(dialogueResult.sentimentScore * 10)));
+            const needsOutcome = applyDialogueOutcomeToNeeds(a, dialogueResult.sentiment, dialogueResult.sentimentScore);
 
             const updatedHistory = [
               ...(a.moodHistory || []),
-              { simTime: timeStr, mood: newMood, stress: a.state.stress }
+              { simTime: timeStr, mood: needsOutcome.psychologicalNeeds.mood, stress: needsOutcome.psychologicalNeeds.stress }
             ].slice(-10);
 
             const updatedMemories = consolidateAndPruneMemories([newMemA, ...(a.memories || [])], simDay, 35);
@@ -688,7 +688,7 @@ export default function App() {
 
             const updatedA: Agent = {
               ...a,
-              state: { ...a.state, mood: newMood },
+              ...needsOutcome,
               currentThought: `关于“${dialogueResult.topic}”，${agentB.name}的见解让我印象颇深。`,
               affinity: { ...a.affinity, [agentB.id]: newAffinity },
               memories: updatedMemories,
@@ -708,11 +708,11 @@ export default function App() {
           if (a.id === agentB.id) {
             const currentAffinity = a.affinity?.[agentA.id] || 0;
             const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaBtoA));
-            const newMood = Math.max(-100, Math.min(100, a.state.mood + Math.round(dialogueResult.sentimentScore * 10)));
+            const needsOutcome = applyDialogueOutcomeToNeeds(a, dialogueResult.sentiment, dialogueResult.sentimentScore);
 
             const updatedHistory = [
               ...(a.moodHistory || []),
-              { simTime: timeStr, mood: newMood, stress: a.state.stress }
+              { simTime: timeStr, mood: needsOutcome.psychologicalNeeds.mood, stress: needsOutcome.psychologicalNeeds.stress }
             ].slice(-10);
 
             const updatedMemories = consolidateAndPruneMemories([newMemB, ...(a.memories || [])], simDay, 35);
@@ -720,7 +720,7 @@ export default function App() {
 
             const updatedB: Agent = {
               ...a,
-              state: { ...a.state, mood: newMood },
+              ...needsOutcome,
               currentThought: `和${agentA.name}交流了“${dialogueResult.topic}”，收获不少。`,
               affinity: { ...a.affinity, [agentA.id]: newAffinity },
               memories: updatedMemories,
@@ -815,10 +815,25 @@ export default function App() {
       prev.map(a => {
         const reaction = agentReactions?.find(r => r.agentId === a.id);
         if (reaction) {
-          const newMood = Math.max(-100, Math.min(100, a.state.mood + (reaction.moodDelta || 0)));
-          const newStress = Math.max(0, Math.min(100, a.state.stress + (reaction.stressDelta || 0)));
-          const updated = {
+          const currentMood = a.psychologicalNeeds?.mood ?? (a.state.mood < 0 ? (a.state.mood + 100) / 2 : a.state.mood);
+          const currentStress = a.psychologicalNeeds?.stress ?? a.state.stress;
+          const newMood = Math.max(0, Math.min(100, Math.round(currentMood + (reaction.moodDelta || 0))));
+          const newStress = Math.max(0, Math.min(100, Math.round(currentStress + (reaction.stressDelta || 0))));
+          
+          const updatedPsy = {
+            ...(a.psychologicalNeeds || { mood: 75, stress: 18, fun: 60, comfort: 80 }),
+            mood: newMood,
+            stress: newStress,
+          };
+          const updatedNeeds = {
+            ...a.needs,
+            mood: newMood,
+            stress: newStress,
+          };
+          const updated: Agent = {
             ...a,
+            psychologicalNeeds: updatedPsy,
+            needs: updatedNeeds,
             state: { ...a.state, mood: newMood, stress: newStress },
             currentThought: reaction.reactionThought || a.currentThought
           };

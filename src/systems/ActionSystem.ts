@@ -1,5 +1,5 @@
 import { Agent, AgentAction, AgentGoal, AgentPlan, AgentNeeds, Building, TownEvent, UtilityActionScore } from '../types/town';
-import { clampNeed, updateAgentNeeds } from './NeedsSystem';
+import { clampNeed, updateAgentNeeds, applyActionEffectsToNeeds } from './NeedsSystem';
 import { evaluateAgentGoal } from './GoalSystem';
 import { planGoalActions } from './PlannerSystem';
 
@@ -23,21 +23,39 @@ export function tickAgentAutonomousBehavior(
     return { ...agent, isMoving: false };
   }
 
-  // 1. Current building resolution
+  // 1. Current building resolution & time parsing
   const currentBuilding = buildings.find(b => b.id === agent.currentBuildingId);
+  const simHour = parseInt(simTime.split(':')[0], 10) || 10;
 
-  // 2. Needs evolution with simulation time & personality
-  let updatedNeeds = updateAgentNeeds(agent, deltaMinutes, currentBuilding, weather);
+  // 2. Needs evolution with simulation time, personality, weather, and dynamic linkages
+  let needsProfile = updateAgentNeeds(agent, deltaMinutes, currentBuilding, weather, simHour);
+  let updatedNeeds = needsProfile.needs;
+  let physicalNeeds = needsProfile.physicalNeeds;
+  let psychologicalNeeds = needsProfile.psychologicalNeeds;
+  let socialNeeds = needsProfile.socialNeeds;
+  let cognitiveNeeds = needsProfile.cognitiveNeeds;
+  let activeConditionTags = needsProfile.activeConditionTags;
 
   // 3. Goal & Plan Lifecycle Check via Utility AI
   let currentGoal = agent.goal;
   let currentPlan = agent.plan;
   let utilityEvaluations = agent.utilityEvaluations;
 
+  const agentWithEvolvedNeeds: Agent = {
+    ...agent,
+    needs: updatedNeeds,
+    physicalNeeds,
+    psychologicalNeeds,
+    socialNeeds,
+    cognitiveNeeds,
+    activeConditionTags,
+    state: needsProfile.state,
+  };
+
   // If no goal or previous goal completed, formulate a new goal and plan with Utility AI
   if (!currentGoal || currentGoal.status === 'completed' || !currentPlan || currentPlan.isCompleted) {
     const evalResult = evaluateAgentGoal(
-      { ...agent, needs: updatedNeeds },
+      agentWithEvolvedNeeds,
       buildings,
       otherAgents,
       simDay,
@@ -48,7 +66,7 @@ export function tickAgentAutonomousBehavior(
     );
     currentGoal = evalResult.goal;
     utilityEvaluations = evalResult.evaluations;
-    currentPlan = planGoalActions(currentGoal, { ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
+    currentPlan = planGoalActions(currentGoal, agentWithEvolvedNeeds, buildings, otherAgents, simDay, simTime);
   }
 
   // Ensure current step index is within bounds
@@ -57,7 +75,7 @@ export function tickAgentAutonomousBehavior(
     currentGoal.status = 'completed';
     // Re-evaluate immediately with Utility AI
     const evalResult = evaluateAgentGoal(
-      { ...agent, needs: updatedNeeds },
+      agentWithEvolvedNeeds,
       buildings,
       otherAgents,
       simDay,
@@ -68,7 +86,7 @@ export function tickAgentAutonomousBehavior(
     );
     currentGoal = evalResult.goal;
     utilityEvaluations = evalResult.evaluations;
-    currentPlan = planGoalActions(currentGoal, { ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
+    currentPlan = planGoalActions(currentGoal, agentWithEvolvedNeeds, buildings, otherAgents, simDay, simTime);
   }
 
   let currentAction = currentPlan.steps[currentPlan.currentStepIndex];
@@ -151,14 +169,27 @@ export function tickAgentAutonomousBehavior(
     if (currentAction.progress >= 100) {
       currentAction.status = 'completed';
 
-      // Apply WORLD FEEDBACK to Needs
+      // Apply WORLD FEEDBACK to 4-dimension Needs
       if (currentAction.feedbackEffects) {
-        Object.entries(currentAction.feedbackEffects).forEach(([needKey, delta]) => {
-          const key = needKey as keyof AgentNeeds;
-          if (key in updatedNeeds) {
-            updatedNeeds[key] = clampNeed(updatedNeeds[key] + (delta || 0));
-          }
-        });
+        const afterAction = applyActionEffectsToNeeds(
+          {
+            ...agentWithEvolvedNeeds,
+            needs: updatedNeeds,
+            physicalNeeds,
+            psychologicalNeeds,
+            socialNeeds,
+            cognitiveNeeds,
+            activeConditionTags,
+          },
+          currentAction.feedbackEffects
+        );
+        updatedNeeds = afterAction.needs;
+        physicalNeeds = afterAction.physicalNeeds;
+        psychologicalNeeds = afterAction.psychologicalNeeds;
+        socialNeeds = afterAction.socialNeeds;
+        cognitiveNeeds = afterAction.cognitiveNeeds;
+        activeConditionTags = afterAction.activeConditionTags;
+        needsProfile.state = afterAction.state;
       }
 
       // Advance to next action step
@@ -184,14 +215,6 @@ export function tickAgentAutonomousBehavior(
     }
   });
 
-  // 8. Keep legacy agent.state synced with agent.needs
-  const syncedState = {
-    energy: Math.round(updatedNeeds.energy),
-    mood: Math.max(-100, Math.min(100, Math.round(100 - updatedNeeds.stress * 1.2 - updatedNeeds.hunger * 0.4))),
-    stress: Math.round(updatedNeeds.stress),
-    sociability: Math.round(100 - updatedNeeds.social),
-  };
-
   return {
     ...agent,
     x: newX,
@@ -201,6 +224,11 @@ export function tickAgentAutonomousBehavior(
     direction,
     isMoving,
     currentBuildingId: minBdist < 80 ? closestBuilding.id : agent.currentBuildingId,
+    physicalNeeds,
+    psychologicalNeeds,
+    socialNeeds,
+    cognitiveNeeds,
+    activeConditionTags,
     needs: updatedNeeds,
     goal: currentGoal,
     plan: currentPlan,
@@ -209,6 +237,6 @@ export function tickAgentAutonomousBehavior(
     currentGoal: currentGoal.title, // text overview compatibility
     currentActivity,
     currentThought,
-    state: syncedState,
+    state: needsProfile.state,
   };
 }

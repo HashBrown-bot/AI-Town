@@ -8,9 +8,39 @@ export interface BigFiveTraits {
   neuroticism: number;      // 神经质(情绪敏感度) 0-100
 }
 
+export interface PhysicalNeeds {
+  energy: number;   // 0-100 精力储备 (低时疲惫困倦，需休息闭目)
+  hunger: number;   // 0-100 饥饿渴求度 (高时饥饿，需就餐补给)
+  health: number;   // 0-100 生理健康状态 (恶劣天气淋雨或长期饥疲受损，静养就医恢复)
+}
+
+export interface PsychologicalNeeds {
+  mood: number;     // 0-100 情绪愉悦度 (0极度沮丧低落，50中性平和，100极度欣喜心安)
+  stress: number;   // 0-100 心理压力负荷 (高时精神紧绷焦躁，急需放松调理)
+  fun: number;      // 0-100 趣味娱乐满足度 (低时枯燥乏味，高时神清气爽)
+  comfort: number;  // 0-100 身心舒适惬意度 (环境舒适与身心松弛度)
+}
+
+export interface SocialNeeds {
+  social: number;    // 0-100 社交充实度 (长期独处时衰减，交流倾谈时恢复)
+  belonging: number; // 0-100 社区群体归属感 (被认可与融入群体的安全感)
+}
+
+export interface CognitiveNeeds {
+  curiosity: number;   // 0-100 求知探索渴求/满足度 (驱使观测、研读与探查)
+  achievement: number; // 0-100 胜任成就感与进取心 (完成工作、研制发明后显著提升)
+}
+
+export interface FullAgentNeeds {
+  physical: PhysicalNeeds;
+  psychological: PsychologicalNeeds;
+  social: SocialNeeds;
+  cognitive: CognitiveNeeds;
+}
+
 export interface AgentStateValues {
   energy: number;     // 0-100
-  mood: number;       // -100 到 +100
+  mood: number;       // 0-100 (或兼容 -100 到 +100)
   stress: number;     // 0-100
   sociability: number;// 0-100
 }
@@ -18,6 +48,7 @@ export interface AgentStateValues {
 export interface AgentNeeds {
   energy: number;      // 0-100 精力储备 (低时疲惫，需休息)
   hunger: number;      // 0-100 饥饿渴求度 (高时饥饿，需就餐)
+  health?: number;     // 0-100 生理健康度
   social: number;      // 0-100 社交渴求度 (高时渴望与邻里倾诉交流)
   fun: number;         // 0-100 娱乐/趣味欲 (高时需游憩、赏星、听琴)
   comfort: number;     // 0-100 舒适度 (低时焦虑不适，需舒适场所与休养)
@@ -26,6 +57,7 @@ export interface AgentNeeds {
   belonging: number;   // 0-100 社区归属感 (低时感到孤独孤立，需参与公共生活)
   achievement: number; // 0-100 进取成就心 (高时有强烈工作与创造欲望)
   stress: number;      // 0-100 心理压力负荷 (高时精神紧绷，急需减压)
+  mood?: number;       // 0-100 心理愉悦度
 }
 
 export type GoalType = 
@@ -173,6 +205,14 @@ export interface Agent {
   quirks: string[];
   state: AgentStateValues;
   needs: AgentNeeds; // 10项自主需求 (0-100)
+  
+  // 4 大核心结构化需求与心理系统 (0-100)
+  physicalNeeds?: PhysicalNeeds;
+  psychologicalNeeds?: PsychologicalNeeds;
+  socialNeeds?: SocialNeeds;
+  cognitiveNeeds?: CognitiveNeeds;
+  activeConditionTags?: string[]; // 动态联动状态指示标签 (如：“睡眠不足”, “严重饥饿”, “雨中漫想”)
+
   goal?: AgentGoal;  // 当前正在追求的自主目标
   plan?: AgentPlan;  // 目标拆解的多步行动计划
   currentAction?: AgentAction; // 正在执行的具体原子行动

@@ -1,4 +1,5 @@
 import { Agent, Building, TownEvent, TownAnalysis } from '../types/town';
+import { ensureAgentFullNeeds } from '../systems/NeedsSystem';
 
 export const INITIAL_BUILDINGS: Building[] = [
   {
@@ -131,7 +132,7 @@ export const INITIAL_BUILDINGS: Building[] = [
   }
 ];
 
-export const INITIAL_AGENTS: Agent[] = [
+const RAW_INITIAL_AGENTS: Agent[] = [
   {
     id: 'agent-1',
     name: '苏清禾',
@@ -933,6 +934,14 @@ export const INITIAL_AGENTS: Agent[] = [
     ]
   }
 ];
+
+export const INITIAL_AGENTS: Agent[] = RAW_INITIAL_AGENTS.map(agent => {
+  const full = ensureAgentFullNeeds(agent);
+  return {
+    ...agent,
+    ...full,
+  };
+});
 
 export const INITIAL_EVENTS: TownEvent[] = [
   {

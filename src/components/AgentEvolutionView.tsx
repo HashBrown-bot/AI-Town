@@ -227,6 +227,20 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
               即时生理与心理状态
             </div>
 
+            {/* Active Condition Badges */}
+            {currentAgent.activeConditionTags && currentAgent.activeConditionTags.length > 0 && (
+              <div className="flex flex-wrap gap-1 pb-1">
+                {currentAgent.activeConditionTags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-950/80 text-indigo-300 border border-indigo-700/40"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-2 text-xs">
               <div>
                 <div className="flex justify-between text-slate-300 mb-1">
@@ -234,12 +248,28 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
                     <Battery className="w-3.5 h-3.5 text-amber-400" />
                     <span>精力 (Energy)</span>
                   </span>
-                  <span className="font-mono">{currentAgent.state.energy}%</span>
+                  <span className="font-mono">{currentAgent.physicalNeeds?.energy ?? currentAgent.state.energy}%</span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5">
                   <div
                     className="bg-amber-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${currentAgent.state.energy}%` }}
+                    style={{ width: `${currentAgent.physicalNeeds?.energy ?? currentAgent.state.energy}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-slate-300 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-emerald-400">🌿</span>
+                    <span>健康 (Health)</span>
+                  </span>
+                  <span className="font-mono text-emerald-400">{Math.round(currentAgent.physicalNeeds?.health ?? currentAgent.needs?.health ?? 90)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div
+                    className="bg-emerald-400 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${currentAgent.physicalNeeds?.health ?? currentAgent.needs?.health ?? 90}%` }}
                   />
                 </div>
               </div>
@@ -251,13 +281,13 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
                     <span>心情愉悦度 (Mood)</span>
                   </span>
                   <span className="font-mono">
-                    {currentAgent.state.mood > 0 ? `+${currentAgent.state.mood}` : currentAgent.state.mood}
+                    {Math.round(currentAgent.psychologicalNeeds?.mood ?? currentAgent.state.mood)}%
                   </span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5">
                   <div
                     className="bg-emerald-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${Math.max(5, (currentAgent.state.mood + 100) / 2)}%` }}
+                    style={{ width: `${Math.round(currentAgent.psychologicalNeeds?.mood ?? currentAgent.state.mood)}%` }}
                   />
                 </div>
               </div>
@@ -268,14 +298,14 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
                     <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                     <span>压力负荷 (Stress)</span>
                   </span>
-                  <span className="font-mono">{currentAgent.state.stress}%</span>
+                  <span className="font-mono">{Math.round(currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      currentAgent.state.stress > 45 ? 'bg-rose-500' : 'bg-blue-500'
+                      (currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress) > 45 ? 'bg-rose-500' : 'bg-blue-500'
                     }`}
-                    style={{ width: `${currentAgent.state.stress}%` }}
+                    style={{ width: `${Math.round(currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress)}%` }}
                   />
                 </div>
               </div>

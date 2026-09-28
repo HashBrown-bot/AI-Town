@@ -44,8 +44,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const positiveInteractions = interactions.filter(i => i.sentiment === 'positive' || i.sentiment === 'deep').length;
   const conflictInteractions = interactions.filter(i => i.sentiment === 'conflict').length;
   
-  const avgMood = Math.round(agents.reduce((acc, a) => acc + a.state.mood, 0) / (agents.length || 1));
-  const avgStress = Math.round(agents.reduce((acc, a) => acc + a.state.stress, 0) / (agents.length || 1));
+  const avgMood = Math.round(agents.reduce((acc, a) => acc + (a.psychologicalNeeds?.mood ?? (a.state.mood < 0 ? (a.state.mood + 100) / 2 : a.state.mood)), 0) / (agents.length || 1));
+  const avgStress = Math.round(agents.reduce((acc, a) => acc + (a.psychologicalNeeds?.stress ?? a.state.stress), 0) / (agents.length || 1));
   const conflictIndex = Math.min(100, Math.round((conflictInteractions / (totalInteractions || 1)) * 100 + (avgStress * 0.3)));
 
   // Location popularity ranking
@@ -268,15 +268,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className={`text-2xl font-bold font-mono tracking-tight ${avgMood >= 60 ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {avgMood > 0 ? `+${avgMood}` : avgMood}
+            <span className={`text-2xl font-bold font-mono tracking-tight ${avgMood >= 60 ? 'text-emerald-400' : avgMood >= 40 ? 'text-amber-400' : 'text-rose-400'}`}>
+              {avgMood}
             </span>
             <span className="text-xs text-slate-400 font-mono">/ 100</span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
             <div 
-              className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
-              style={{ width: `${Math.max(5, (avgMood + 100) / 2)}%` }} 
+              className={`h-full rounded-full transition-all duration-500 ${avgMood >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+              style={{ width: `${Math.max(5, Math.min(100, avgMood))}%` }} 
             />
           </div>
         </div>
