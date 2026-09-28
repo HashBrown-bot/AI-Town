@@ -15,15 +15,114 @@ export interface AgentStateValues {
   sociability: number;// 0-100
 }
 
+export interface AgentNeeds {
+  energy: number;      // 0-100 精力储备 (低时疲惫，需休息)
+  hunger: number;      // 0-100 饥饿渴求度 (高时饥饿，需就餐)
+  social: number;      // 0-100 社交渴求度 (高时渴望与邻里倾诉交流)
+  fun: number;         // 0-100 娱乐/趣味欲 (高时需游憩、赏星、听琴)
+  comfort: number;     // 0-100 舒适度 (低时焦虑不适，需舒适场所与休养)
+  curiosity: number;   // 0-100 求知探索欲 (高时需探查古籍、观测星仪)
+  safety: number;      // 0-100 安全秩序感 (低时需回归熟悉场所或与信任伙伴同行)
+  belonging: number;   // 0-100 社区归属感 (低时感到孤独孤立，需参与公共生活)
+  achievement: number; // 0-100 进取成就心 (高时有强烈工作与创造欲望)
+  stress: number;      // 0-100 心理压力负荷 (高时精神紧绷，急需减压)
+}
+
+export type GoalType = 
+  | 'rest'               // 休息恢复
+  | 'eat_drink'          // 进餐补给
+  | 'socialize'          // 社交倾谈
+  | 'explore_research'   // 好奇探索与研读
+  | 'work_achievement'   // 工作与发明创造
+  | 'leisure_fun'        // 休闲玩乐与散心
+  | 'seek_comfort_care'  // 康养调理与身心安顿
+  | 'civic_governance';  // 市政公约与公共巡视
+
+export interface AgentGoal {
+  id: string;
+  type: GoalType;
+  title: string;           // 目标名称，如：“前往观星工坊检修机械星盘”
+  description: string;     // 详细目标阐述
+  motivation: string;      // 触发动机：“好奇心旺盛且成就欲强烈 (Curiosity: 82%)”
+  dominantNeed: keyof AgentNeeds; // 主导需求
+  urgency: number;         // 1-10 紧急度
+  targetBuildingId?: string;
+  targetAgentId?: string;
+  targetAgentName?: string;
+  createdAt: { simDay: number; simTime: string; timestamp: number };
+  status: 'active' | 'completed' | 'abandoned';
+}
+
+export type ActionType = 
+  | 'travel_to_building'   // 前往建筑地点
+  | 'travel_to_agent'      // 前往寻找特定居民
+  | 'wander_area'          // 驻足散步
+  | 'inspect_equipment'    // 检查设施与工具
+  | 'consume_food_drink'   // 享用美食或咖啡茶饮
+  | 'rest_sleep'           // 闭目休憩或安睡
+  | 'work_task'            // 专注专属职业任务
+  | 'converse_with_agent'  // 寻找居民交谈
+  | 'enjoy_entertainment'  // 喷泉赏鸽/听诗琴/看星空
+  | 'seek_medical_aid'     // 诊所问诊与精油疗愈
+  | 'civic_patrol';        // 市政巡视与簿记核验
+
+export interface AgentAction {
+  id: string;
+  type: ActionType;
+  description: string;     // 行动描述：“在工坊操作台调试第三号黄铜齿轮”
+  targetBuildingId?: string;
+  targetAgentId?: string;
+  targetAgentName?: string;
+  targetCoordinates?: { x: number; y: number };
+  durationMinutes: number; // 预计耗费模拟分钟
+  elapsedMinutes: number;  // 已进行模拟分钟
+  progress: number;        // 0-100%
+  status: 'pending' | 'in_progress' | 'completed' | 'interrupted';
+  feedbackEffects?: Partial<Record<keyof AgentNeeds, number>>; // 完成后的世界反馈
+}
+
+export interface AgentPlan {
+  id: string;
+  goalId: string;
+  goalTitle: string;
+  steps: AgentAction[];
+  currentStepIndex: number;
+  createdAt: { simDay: number; simTime: string; timestamp: number };
+  totalSteps: number;
+  isCompleted: boolean;
+}
+
+export type MemoryType = 'episodic' | 'semantic' | 'relationship' | 'reflection';
+
 export interface AgentMemory {
   id: string;
+  type: MemoryType;
   simDay: number;
   simTime: string;
   content: string;
   importance: number; // 1-10
-  associatedAgentId?: string;
-  associatedAgentName?: string;
+  emotionalIntensity: number; // 1-10 情绪烈度
+  recency?: number; // 0-1 检索时的时效性得分
+  relevance?: number; // 0-1 检索时的情境相关性得分
+  score?: number; // 检索综合评分
+  relatedAgentIds: string[]; // 关联的居民ID列表
+  relatedAgentNames?: string[]; // 关联的居民姓名列表
+  tags: string[]; // 关键词分类标签
+  createdAt: {
+    simDay: number;
+    simTime: string;
+    timestamp: number;
+  };
+  lastAccessedAt?: {
+    simDay: number;
+    simTime: string;
+    timestamp: number;
+  };
+  associatedAgentId?: string; // 兼容旧字段
+  associatedAgentName?: string; // 兼容旧字段
   sentiment: 'positive' | 'neutral' | 'conflict' | 'deep' | 'collaborative';
+  evidenceMemoryIds?: string[]; // 引发该反思(Reflection)的具体证据记忆ID
+  consolidated?: boolean; // 是否已被整合巩固
 }
 
 export interface Agent {
@@ -38,8 +137,13 @@ export interface Agent {
   bio: string;
   quirks: string[];
   state: AgentStateValues;
+  needs: AgentNeeds; // 10项自主需求 (0-100)
+  goal?: AgentGoal;  // 当前正在追求的自主目标
+  plan?: AgentPlan;  // 目标拆解的多步行动计划
+  currentAction?: AgentAction; // 正在执行的具体原子行动
   currentActivity: string;
   currentThought: string;
+  currentGoal?: string; // 居民当前追求的核心目标/意向 (文本概述兼容)
   currentBuildingId: string;
   
   // Spatial coordinates on simulation canvas (in grid pixels)
@@ -55,6 +159,7 @@ export interface Agent {
   affinity: Record<string, number>; // targetAgentId -> affinity score (-100 to 100)
   memories: AgentMemory[];
   moodHistory: { simTime: string; mood: number; stress: number }[];
+  unreflectedMemoryCount?: number; // 距离上次反思积累的未消化记忆计数
 }
 
 export interface Building {
@@ -148,4 +253,44 @@ export interface ActiveInteractionBubble {
   speakerName?: string;
   sentiment: string;
   progress: number; // 0-100%
+}
+
+export interface MemoryRetrievalOptions {
+  targetAgentId?: string;
+  targetAgentName?: string;
+  currentLocation?: string;
+  currentActivity?: string;
+  topicHint?: string;
+  currentSimDay: number;
+  currentSimTime: string;
+  topK?: number;
+  weights?: {
+    importance: number;
+    relevance: number;
+    recency: number;
+    emotionalIntensity: number;
+  };
+}
+
+export interface RetrievedMemoryContext {
+  topMemories: AgentMemory[];
+  relationshipMemories: AgentMemory[];
+  recentReflections: AgentMemory[];
+  recentEpisodic: AgentMemory[];
+  semanticBeliefs: AgentMemory[];
+  formattedPromptContext: string;
+}
+
+export interface ReflectionResult {
+  reflection: string;
+  type: 'reflection' | 'semantic' | 'relationship';
+  importance: number;
+  emotionalIntensity: number;
+  relatedAgentIds: string[];
+  tags: string[];
+  newGoal?: string;
+  affinityAdjustments?: Record<string, number>;
+  moodDelta?: number;
+  stressDelta?: number;
+  evidenceMemoryIds?: string[];
 }

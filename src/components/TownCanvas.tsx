@@ -699,6 +699,24 @@ function drawPixelAgent(
   ctx.font = 'bold 9px "Plus Jakarta Sans", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(agent.name, x, y - 25);
+
+  // Selected Agent Action & Goal Indicator Tag
+  if (isSelected && (agent.goal || agent.currentActivity)) {
+    const actionLabel = agent.goal?.title || agent.currentActivity;
+    const shortLabel = actionLabel.length > 15 ? actionLabel.slice(0, 14) + '…' : actionLabel;
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.roundRect(x - 52, y - 53, 104, 14, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = 'bold 8px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`🎯 ${shortLabel}`, x, y - 43);
+  }
 }
 
 function drawInteractionSpeechBubble(

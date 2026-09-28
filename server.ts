@@ -25,7 +25,7 @@ let quotaExhaustedUntil = 0;
 interface ApiCallLog {
   id: string;
   timestamp: number;
-  task: 'dialogue' | 'analyze' | 'event_impact' | 'generate_agent';
+  task: 'dialogue' | 'analyze' | 'event_impact' | 'generate_agent' | 'reflect';
   model: string;
   status: 'gemini_success' | 'rate_limited_fallback' | 'quota_error_fallback';
   latencyMs: number;
@@ -48,6 +48,7 @@ const apiMetrics = {
     analyze: 0,
     event_impact: 0,
     generate_agent: 0,
+    reflect: 0,
   },
   recentCalls: [] as ApiCallLog[],
   limits: {
@@ -124,10 +125,10 @@ app.get('/api/metrics/quota', (_req, res) => {
 
 // ==========================================
 // 1. POST /api/ai/dialogue
-// Autonomous dialogue generation between two agents
+// Autonomous dialogue generation between two agents with Memory Retrieval Context
 // ==========================================
 app.post('/api/ai/dialogue', async (req, res) => {
-  const { agentA, agentB, location, context, recentEvents } = req.body;
+  const { agentA, agentB, location, context, recentEvents, agentAContext, agentBContext } = req.body;
   const startTime = Date.now();
 
   if (!ai || isGeminiRateLimited()) {
@@ -150,31 +151,41 @@ app.post('/api/ai/dialogue', async (req, res) => {
     const prompt = `
 你是一个社会模拟仿真世界的叙事引擎。在像素小镇"${location?.name || '小镇'}"（功能：${location?.description || '公共设施'}）中，两位居民发生了一次偶遇交谈。
 
-【居民 A】
+【居民 A 档案】
 姓名: ${agentA.name}
 职业: ${agentA.role}
 MBTI与性格: ${agentA.mbti}, 大五人格(开放性:${agentA.bigFive?.openness}, 尽责性:${agentA.bigFive?.conscientiousness}, 外向性:${agentA.bigFive?.extraversion}, 宜人性:${agentA.bigFive?.agreeableness}, 神经质:${agentA.bigFive?.neuroticism})
 当前心情/状态: 心情${agentA.state?.mood}, 压力${agentA.state?.stress}, 当前活动: ${agentA.currentActivity}
+当前追求目标: ${agentA.currentGoal || '维持小镇日常并探索生活'}
 核心背景与怪癖: ${agentA.bio} | ${agentA.quirks?.join(', ')}
 对 ${agentB.name} 的好感度: ${agentA.affinity?.[agentB.id] || 0} (-100到+100)
+【居民 A 检索出的长期记忆与反思】:
+${agentAContext || '暂无对该居民的深刻历史往来，初次正常接触。'}
 
-【居民 B】
+【居民 B 档案】
 姓名: ${agentB.name}
 职业: ${agentB.role}
 MBTI与性格: ${agentB.mbti}, 大五人格(开放性:${agentB.bigFive?.openness}, 尽责性:${agentB.bigFive?.conscientiousness}, 外向性:${agentB.bigFive?.extraversion}, 宜人性:${agentB.bigFive?.agreeableness}, 神经质:${agentB.bigFive?.neuroticism})
 当前心情/状态: 心情${agentB.state?.mood}, 压力${agentB.state?.stress}, 当前活动: ${agentB.currentActivity}
+当前追求目标: ${agentB.currentGoal || '维持小镇日常并探索生活'}
 核心背景与怪癖: ${agentB.bio} | ${agentB.quirks?.join(', ')}
 对 ${agentA.name} 的好感度: ${agentB.affinity?.[agentA.id] || 0} (-100到+100)
+【居民 B 检索出的长期记忆与反思】:
+${agentBContext || '暂无对该居民的深刻历史往来，初次正常接触。'}
 
 【当前场景与近期小镇事件】
 地点: ${location?.name || '小镇'}
 近期全镇事件: ${recentEvents || '小镇岁月安好，微风拂过广场'}
 偶遇背景: ${context || '在同一场所驻足相遇'}
 
-请生成一段自然、生动且富有个性色彩的对话（4-6个交替对话回合），并评估交谈对彼此好感度变化、情感基调与总结。
+【关键对话原则】:
+1. 双方必须根据检索出的【长期记忆与反思】展开交流！如果之前有合作、冲突或信任积累，必须自然提及，不能表现得像陌生人！
+2. 对话应反映出双方的性格特质与当前心情状态，4-6个交替对话回合。
+3. 产生本次交谈后，双方各自沉淀的核心情境记忆（memoryA、memoryB）必须具体生动。
+
 严格输出以下纯JSON格式（不要包含Markdown代码块或其他多余文字）：
 {
-  "topic": "对话核心主题短语（如：星夜研读古籍的猜想）",
+  "topic": "对话核心主题短语（如：就昨夜星空手稿探讨古籍合作）",
   "summary": "一句话对话简要纪要",
   "sentiment": "positive | neutral | conflict | deep | collaborative",
   "sentimentScore": 0.5, // -1.0 到 1.0 的浮点数
@@ -184,8 +195,10 @@ MBTI与性格: ${agentB.mbti}, 大五人格(开放性:${agentB.bigFive?.openness
   ],
   "affinityDeltaAtoB": 5, // A对B的好感变化 (-15到+15)
   "affinityDeltaBtoA": 5, // B对A的好感变化 (-15到+15)
-  "memoryA": "A记住的关于本次互动的核心记忆",
-  "memoryB": "B记住的关于本次互动的核心记忆"
+  "memoryA": "A记住的关于本次互动的具体情境记忆",
+  "memoryB": "B记住的关于本次互动的具体情境记忆",
+  "importance": 7, // 1-10 本次交流的重要度评分
+  "emotionalIntensity": 6 // 1-10 本次交流的情绪波动烈度
 }
 `;
 
@@ -226,6 +239,114 @@ MBTI与性格: ${agentB.mbti}, 大五人格(开放性:${agentB.bigFive?.openness
       promptCharLength: 0,
       approxTokens: 280,
       summary: `[配额熔断降级] ${agentA?.name} & ${agentB?.name}: ${result.topic}`
+    });
+    return res.json(result);
+  }
+});
+
+// ==========================================
+// 1.5. POST /api/ai/reflect
+// Agent Long-Term Memory Synthesis & Reflection Engine
+// ==========================================
+app.post('/api/ai/reflect', async (req, res) => {
+  const { agent, recentMemories, currentSimDay, currentSimTime } = req.body;
+  const startTime = Date.now();
+
+  if (!ai || isGeminiRateLimited()) {
+    const result = generateProceduralReflection(agent, recentMemories);
+    recordApiCall({
+      id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      task: 'reflect',
+      model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
+      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      latencyMs: Date.now() - startTime,
+      promptCharLength: 0,
+      approxTokens: 290,
+      summary: `${agent?.name} 深度反思顿悟 (基准降级)`
+    });
+    return res.json(result);
+  }
+
+  try {
+    const memoriesText = (recentMemories || []).slice(0, 10).map((m: any, idx: number) => 
+      `${idx + 1}. [第${m.simDay || currentSimDay}天 ${m.simTime || ''}] ${m.content} (情感:${m.sentiment || 'neutral'}, 重要度:${m.importance || 5}/10)`
+    ).join('\n');
+
+    const prompt = `
+你是一个虚拟AI小镇居民的“深层意识与反思系统”（Reflection Engine）。
+居民在经历了一系列生活事件、人际交谈与情感波动后，需要站在更高维度，对近期积累的散碎记忆进行深度反思、抽象与顿悟，提炼出长期的认知、人际印象演化或生活目标调整。
+
+【居民个人档案】
+姓名: ${agent.name}
+职业: ${agent.role}
+MBTI性格: ${agent.mbti}
+当前生活目标: ${agent.currentGoal || '在小镇探索生活'}
+生平背景: ${agent.bio}
+当前心情: ${agent.state?.mood}, 压力: ${agent.state?.stress}
+
+【最近累积的未消化记忆日志 (Episodic Memories)】
+${memoriesText || '1. 今日在小镇正常工作，与邻里有日常交流。'}
+
+请基于以上记忆流，让${agent.name}进行一次真切而深刻的“反思顿悟 (Reflection)”。
+反思可以是：
+- 对某个特定居民的信任度加深或产生戒心（如：“我最近越来越信任苏清禾，或许可以请她帮我筹划星空沙龙。”）
+- 对生活方式或工作状态的自我领悟（如：“连续数日的赶工让我意识到，不能忽视身体的疲惫，该去诊所走走了。”）
+- 产生了一个新的明确目标或行动计划（如：“我决定在下次议事会上正式提出修建观星廊道的提案。”）
+
+严格输出纯JSON格式：
+{
+  "reflection": "以第一人称表达的深度反思句子（40-90字，真诚有深度）",
+  "type": "reflection",
+  "importance": 9, // 1-10，反思一般具有较高重要度
+  "emotionalIntensity": 7, // 1-10
+  "relatedAgentIds": ["关联居民的ID列表，若针对具体人"],
+  "tags": ["反思", "人际信任", "成长"],
+  "newGoal": "更新后的近期行动目标（若反思促使了目标改变，30字内）",
+  "affinityAdjustments": {
+    // 目标居民ID: 好感微调数值 (-10 到 +15)
+  },
+  "moodDelta": 5, // 心情改善或波动 (-15 到 +15)
+  "stressDelta": -4 // 压力缓解或增加 (-15 到 +15)
+}
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+
+    recordApiCall({
+      id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      task: 'reflect',
+      model: 'gemini-3.8-flash',
+      status: 'gemini_success',
+      latencyMs: Date.now() - startTime,
+      promptCharLength: prompt.length,
+      approxTokens: Math.round((prompt.length + (response.text?.length || 0)) / 3),
+      summary: `${agent?.name} 形成深度反思: ${parsed.reflection?.slice(0, 20)}...`
+    });
+
+    return res.json(parsed);
+  } catch (err: any) {
+    handleGeminiQuotaError(err, 'Agent Reflection Generation');
+    const result = generateProceduralReflection(agent, recentMemories);
+    recordApiCall({
+      id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      task: 'reflect',
+      model: 'procedural-fallback',
+      status: 'quota_error_fallback',
+      latencyMs: Date.now() - startTime,
+      promptCharLength: 0,
+      approxTokens: 250,
+      summary: `[降级] ${agent?.name} 深度反思顿悟`
     });
     return res.json(result);
   }
@@ -687,6 +808,46 @@ function generateProceduralResident(hint: string) {
     bio: `${names[idx]}带着一本斑驳的日记本来到小镇，热爱观察每个静谧时刻。`,
     quirks: ['喜欢收集形状独特的落叶', '每天清晨记录风向', '喝茶从不加糖'],
     spriteColor: 'emerald'
+  };
+}
+
+function generateProceduralReflection(agent: any, recentMemories: any[]) {
+  const candidates = [
+    {
+      reflection: `这段时间在小镇的忙碌与交谈，让我意识到：生活不仅是孤身一人的钻研，更需要敞开心扉去倾听邻里的心声。`,
+      newGoal: `多前往公共绿地或咖啡馆，主动倾听他人的想法`,
+      moodDelta: 4,
+      stressDelta: -3,
+      tags: ['心境调适', '社交认同']
+    },
+    {
+      reflection: `大家对于小镇公共秩序与生活自由的不同观点，让我懂得规则的本质是为了让每个人都能安心安居，不必非黑即白。`,
+      newGoal: `寻求更加柔和包容的沟通方式来推进计划`,
+      moodDelta: 3,
+      stressDelta: -4,
+      tags: ['包容理解', '处世之道']
+    },
+    {
+      reflection: `小镇清晨的面包香与黄昏的星光格外治愈，适度放慢步调，反而能激发更多灵感与工作效率。`,
+      newGoal: `平衡劳作与歇息，不再过度消耗精力`,
+      moodDelta: 6,
+      stressDelta: -5,
+      tags: ['生活美学', '自我关怀']
+    }
+  ];
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return {
+    reflection: pick.reflection,
+    type: 'reflection',
+    importance: 8,
+    emotionalIntensity: 6,
+    relatedAgentIds: recentMemories?.[0]?.relatedAgentIds || [],
+    tags: pick.tags,
+    newGoal: pick.newGoal,
+    affinityAdjustments: {},
+    moodDelta: pick.moodDelta,
+    stressDelta: pick.stressDelta
   };
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Agent, Building } from '../types/town';
-import { X, MessageSquare, TrendingUp, Sparkles, MapPin, Battery, Smile, AlertCircle } from 'lucide-react';
+import { X, MessageSquare, TrendingUp, Sparkles, MapPin, Battery, Smile, AlertCircle, Target, Compass, Footprints, Flame } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
 interface AgentDetailModalProps {
@@ -20,13 +20,16 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
 }) => {
   if (!agent) return null;
 
+  const currentAction = agent.plan?.steps[agent.plan.currentStepIndex] || agent.currentAction;
+  const currentGoal = agent.goal;
+
   return (
-    <div className="absolute top-16 left-6 z-20 w-80 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-5 shadow-2xl text-slate-100 animate-fadeIn">
+    <div className="absolute top-16 left-6 z-20 w-88 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-5 shadow-2xl text-slate-100 animate-fadeIn max-h-[85vh] overflow-y-auto no-scrollbar">
       {/* Header */}
       <div className="flex items-start justify-between pb-3 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-bold text-white shadow border border-white/20"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-bold text-white shadow border border-white/20 shrink-0"
             style={{ backgroundColor: agent.spriteColor || '#3b82f6' }}
           >
             {agent.name.slice(0, 1)}
@@ -53,46 +56,116 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
         </button>
       </div>
 
-      {/* Content */}
+      {/* Autonomous Decision System Showcase (Needs -> Goal -> Plan -> Action) */}
       <div className="py-3 space-y-3 text-xs">
-        {/* Current Activity */}
-        <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block">
-            此刻状态与行踪
-          </span>
-          <div className="text-slate-200 mt-0.5 flex items-center gap-1.5 font-medium">
-            <span>{building?.icon || '📍'}</span>
-            <span>{agent.currentActivity}</span>
+        {/* Active Goal & Motivation */}
+        {currentGoal && (
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/50 to-indigo-950/50 border border-blue-800/40 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-blue-400" />
+                <span>自主追求目标 (Active Goal)</span>
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
+                紧急度: {currentGoal.urgency}/10
+              </span>
+            </div>
+            <div className="text-slate-100 font-semibold text-xs leading-snug">
+              {currentGoal.title}
+            </div>
+            <div className="text-[11px] text-slate-300 pt-0.5 border-t border-blue-900/40">
+              <span className="text-indigo-400 font-semibold">【为什么做这事】: </span>
+              <span>{currentGoal.motivation}</span>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Thought Bubble */}
-        <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block">
-            内心心声
-          </span>
-          <p className="text-slate-300 italic mt-0.5">
-            "{agent.currentThought}"
-          </p>
-        </div>
-
-        {/* Quick Meters */}
-        <div className="grid grid-cols-3 gap-2 text-center font-mono">
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-[9px] text-slate-500 block">精力</span>
-            <span className="text-amber-400 font-bold">{agent.state.energy}%</span>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-[9px] text-slate-500 block">心情</span>
-            <span className="text-emerald-400 font-bold">
-              {agent.state.mood > 0 ? `+${agent.state.mood}` : agent.state.mood}
+        {/* Current Executing Action & Progress */}
+        <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <Footprints className="w-3.5 h-3.5 text-emerald-400" />
+              <span>当前执行计划 (Plan Step {agent.plan ? `${agent.plan.currentStepIndex + 1}/${agent.plan.totalSteps}` : '1/1'})</span>
+            </span>
+            <span className="font-mono text-emerald-400 font-bold">
+              {currentAction?.progress || 0}%
             </span>
           </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-[9px] text-slate-500 block">压力</span>
-            <span className="text-rose-400 font-bold">{agent.state.stress}%</span>
+
+          <div className="text-slate-200 font-medium leading-relaxed">
+            {currentAction?.description || agent.currentActivity}
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-400 h-full rounded-full transition-all duration-300"
+              style={{ width: `${currentAction?.progress || 0}%` }}
+            />
+          </div>
+
+          <div className="text-[11px] text-slate-400 flex items-center gap-1 pt-0.5">
+            <span>{building?.icon || '📍'}</span>
+            <span>位于: {building?.name || '小镇街巷'}</span>
           </div>
         </div>
+
+        {/* Inner Thought */}
+        <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-300 italic">
+          "{agent.currentThought}"
+        </div>
+
+        {/* 10 Needs Mini Dashboard */}
+        {agent.needs && (
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+              <span>内在需求状态 (Needs)</span>
+              <span className="text-[9px] font-mono text-slate-500">性格动态调制</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
+                <div className="flex justify-between text-slate-400">
+                  <span>⚡ 精力 (Energy)</span>
+                  <span className="text-amber-400 font-bold">{agent.needs.energy}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-amber-400 h-full" style={{ width: `${agent.needs.energy}%` }} />
+                </div>
+              </div>
+
+              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
+                <div className="flex justify-between text-slate-400">
+                  <span>🍞 饥饿 (Hunger)</span>
+                  <span className="text-orange-400 font-bold">{agent.needs.hunger}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-orange-400 h-full" style={{ width: `${agent.needs.hunger}%` }} />
+                </div>
+              </div>
+
+              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
+                <div className="flex justify-between text-slate-400">
+                  <span>💬 社交渴求 (Social)</span>
+                  <span className="text-blue-400 font-bold">{agent.needs.social}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-blue-400 h-full" style={{ width: `${agent.needs.social}%` }} />
+                </div>
+              </div>
+
+              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
+                <div className="flex justify-between text-slate-400">
+                  <span>🔍 求知探索 (Curiosity)</span>
+                  <span className="text-purple-400 font-bold">{agent.needs.curiosity}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-purple-400 h-full" style={{ width: `${agent.needs.curiosity}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer Buttons */}
@@ -110,9 +183,10 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           className="flex-1 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition flex items-center justify-center gap-1.5 shadow"
         >
           <TrendingUp className="w-3.5 h-3.5" />
-          <span>演变全轨迹</span>
+          <span>决策与记忆全貌</span>
         </button>
       </div>
     </div>
   );
 };
+

@@ -137,8 +137,21 @@ export const AgentPersonaStudio: React.FC<AgentPersonaStudioProps> = ({
           stress: 20,
           sociability: 75
         },
+        needs: {
+          energy: 85,
+          hunger: 20,
+          social: 40,
+          fun: 35,
+          comfort: 80,
+          curiosity: 65,
+          safety: 85,
+          belonging: 70,
+          achievement: 60,
+          stress: 20
+        },
         currentActivity: `在小镇漫步了解环境`,
         currentThought: `这里的空气真清新，希望能尽快融入大家。`,
+        currentGoal: `尽快熟悉小镇的环境与居民，建立属于自己的生活步调`,
         currentBuildingId: 'central_park',
         x: 520,
         y: 460,
@@ -151,10 +164,16 @@ export const AgentPersonaStudio: React.FC<AgentPersonaStudioProps> = ({
         memories: [
           {
             id: `mem-${Date.now()}`,
+            type: 'episodic',
             simDay: 1,
             simTime: '10:00',
             content: `搬入了Aetheria智能小镇，开始了全新的人生篇章。`,
             importance: 10,
+            emotionalIntensity: 8,
+            relatedAgentIds: [],
+            tags: ['定居', '新生活', '初见'],
+            createdAt: { simDay: 1, simTime: '10:00', timestamp: Date.now() },
+            lastAccessedAt: { simDay: 1, simTime: '10:00', timestamp: Date.now() },
             sentiment: 'positive'
           }
         ],

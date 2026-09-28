@@ -37,7 +37,14 @@ import {
   fetchCloudEvents,
   fetchCloudAnalysis
 } from './services/firebase';
-import { requestAgentDialogue } from './services/aiTownService';
+import { requestAgentDialogue, requestAgentReflection } from './services/aiTownService';
+import { 
+  retrieveAgentMemories, 
+  createAgentMemory, 
+  consolidateAndPruneMemories, 
+  applyReflectionToAgent 
+} from './services/memorySystem';
+import { tickAgentAutonomousBehavior } from './systems';
 import { soundEngine } from './utils/audioSystem';
 
 // Local Storage Keys for Instant Zero-Flash Hydration
@@ -85,7 +92,23 @@ function loadStoredAgents(): Agent[] {
     const item = localStorage.getItem(STORAGE_AGENTS);
     if (item) {
       const parsed = JSON.parse(item);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((agent: any) => ({
+          ...agent,
+          needs: agent.needs || {
+            energy: agent.state?.energy || 80,
+            hunger: 25,
+            social: 35,
+            fun: 30,
+            comfort: 75,
+            curiosity: 60,
+            safety: 85,
+            belonging: 70,
+            achievement: 65,
+            stress: agent.state?.stress || 20
+          }
+        }));
+      }
     }
   } catch (err) {
     console.warn('Failed to load local agents:', err);
@@ -136,6 +159,9 @@ export default function App() {
   // Cloud Firestore Sync State
   const [cloudSyncCount, setCloudSyncCount] = useState<number>(0);
   const [isCloudReady, setIsCloudReady] = useState<boolean>(false);
+
+  // Reflection active status
+  const [isReflectingAgentId, setIsReflectingAgentId] = useState<string | null>(null);
 
   // Ref to track interacting agent IDs to prevent double encounters
   const interactingAgentIdsRef = useRef<Set<string>>(new Set());
@@ -387,6 +413,18 @@ export default function App() {
     initialRecords.forEach(r => syncInteractionToCloud(r));
   };
 
+  // Evening reflection: at 22:00, pick an agent with memories to synthesize daily reflection
+  const triggerEveningReflection = () => {
+    setAgents(currentAgents => {
+      const candidates = currentAgents.filter(a => (a.memories || []).length >= 3);
+      if (candidates.length > 0) {
+        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+        setTimeout(() => handleTriggerAgentReflection(picked.id), 1200);
+      }
+      return currentAgents;
+    });
+  };
+
   // 2. Main Simulation Tick Loop (Advances clock & agent movement)
   useEffect(() => {
     if (simSpeed === 0) return;
@@ -410,6 +448,11 @@ export default function App() {
             else if (nextHour === 18) setWeather('golden_sunset');
             else if (nextHour === 21) setWeather('starry_night');
 
+            // Trigger evening daily reflection check at 22:00
+            if (nextHour === 22) {
+              triggerEveningReflection();
+            }
+
             return nextHour;
           });
         }
@@ -423,60 +466,23 @@ export default function App() {
     return () => clearInterval(timer);
   }, [simSpeed, buildings]);
 
-  // Agent Step & Encounter Detection
+  // Agent Step & Autonomous Behavior Cycle (Needs -> Goal -> Plan -> Action)
   const updateAgentsStep = useCallback(() => {
     setAgents(prevAgents => {
+      const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
+      
       const updated = prevAgents.map(agent => {
-        // If agent is chatting, stay still
-        if (interactingAgentIdsRef.current.has(agent.id)) {
-          return { ...agent, isMoving: false };
-        }
-
-        let newX = agent.x;
-        let newY = agent.y;
-        let newTargetX = agent.targetX;
-        let newTargetY = agent.targetY;
-        let isMoving = false;
-        let direction = agent.direction;
-
-        const dist = Math.hypot(newTargetX - newX, newTargetY - newY);
-
-        if (dist > 4) {
-          isMoving = true;
-          const dx = (newTargetX - newX) / dist;
-          const dy = (newTargetY - newY) / dist;
-
-          newX += dx * agent.speed * 2.2;
-          newY += dy * agent.speed * 2.2;
-
-          if (Math.abs(dx) > Math.abs(dy)) {
-            direction = dx > 0 ? 'right' : 'left';
-          } else {
-            direction = dy > 0 ? 'down' : 'up';
-          }
-        } else {
-          // Reached target destination: pick a new wander target nearby or visit another building
-          if (Math.random() < 0.25) {
-            // Chance to visit a different building entrance
-            const randomBuilding = buildings[Math.floor(Math.random() * buildings.length)];
-            newTargetX = randomBuilding.entranceX + (Math.random() * 40 - 20);
-            newTargetY = randomBuilding.entranceY + (Math.random() * 20 - 10);
-          } else {
-            // Wander around current area
-            newTargetX = Math.max(100, Math.min(950, newX + (Math.random() * 120 - 60)));
-            newTargetY = Math.max(120, Math.min(850, newY + (Math.random() * 120 - 60)));
-          }
-        }
-
-        return {
-          ...agent,
-          x: newX,
-          y: newY,
-          targetX: newTargetX,
-          targetY: newTargetY,
-          direction,
-          isMoving
-        };
+        const isInteracting = interactingAgentIdsRef.current.has(agent.id);
+        return tickAgentAutonomousBehavior(
+          agent,
+          1, // 1 simulation minute per tick
+          buildings,
+          prevAgents,
+          simDay,
+          timeStr,
+          weather,
+          isInteracting
+        );
       });
 
       // Proximity encounter trigger: check if two agents are close (< 45px) and not chatting
@@ -506,7 +512,7 @@ export default function App() {
 
       return updated;
     });
-  }, [buildings]);
+  }, [buildings, simHour, simMinute, simDay, weather]);
 
   // 3. Trigger Autonomous Dialogue between two agents
   const triggerAutonomousDialogue = async (agentA: Agent, agentB: Agent) => {
@@ -547,9 +553,39 @@ export default function App() {
     soundEngine.playChime();
 
     try {
-      // Call Gemini / server dialogue generation
+      const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
+
+      // 1. Retrieve relevant memories for both interacting agents
+      const retrievedA = retrieveAgentMemories(agentA, {
+        targetAgentId: agentB.id,
+        targetAgentName: agentB.name,
+        currentLocation: nearestBuilding.name,
+        currentActivity: agentA.currentActivity,
+        currentSimDay: simDay,
+        currentSimTime: timeStr,
+        topK: 5
+      });
+
+      const retrievedB = retrieveAgentMemories(agentB, {
+        targetAgentId: agentA.id,
+        targetAgentName: agentA.name,
+        currentLocation: nearestBuilding.name,
+        currentActivity: agentB.currentActivity,
+        currentSimDay: simDay,
+        currentSimTime: timeStr,
+        topK: 5
+      });
+
+      // 2. Call Gemini / server dialogue generation with retrieved memory context
       const recentEventsStr = events.slice(0, 2).map(e => e.title).join('; ');
-      const dialogueResult = await requestAgentDialogue(agentA, agentB, nearestBuilding, recentEventsStr);
+      const dialogueResult = await requestAgentDialogue(
+        agentA, 
+        agentB, 
+        nearestBuilding, 
+        recentEventsStr,
+        retrievedA.formattedPromptContext,
+        retrievedB.formattedPromptContext
+      );
 
       // Play through dialogue lines sequentially on canvas bubble
       let lineIdx = 0;
@@ -588,7 +624,7 @@ export default function App() {
         id: `interaction-${Date.now()}`,
         timestamp: Date.now(),
         simDay,
-        simTime: `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`,
+        simTime: timeStr,
         participants: [agentA.id, agentB.id],
         participantNames: [agentA.name, agentB.name],
         location: nearestBuilding.name,
@@ -607,38 +643,64 @@ export default function App() {
       // Update State: Add Interaction Record
       setInteractions(prev => [newRecord, ...prev]);
 
-      // Update Agent State & Memory Stream
+      // 3. Create standardized episodic memories and apply consolidation & pruning
+      const newMemA = createAgentMemory({
+        type: 'episodic',
+        simDay,
+        simTime: timeStr,
+        content: dialogueResult.memoryA,
+        importance: dialogueResult.importance || Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 8 + 3))),
+        emotionalIntensity: dialogueResult.emotionalIntensity || Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 7 + 3))),
+        relatedAgentIds: [agentB.id],
+        relatedAgentNames: [agentB.name],
+        tags: [nearestBuilding.name, dialogueResult.sentiment],
+        sentiment: dialogueResult.sentiment
+      });
+
+      const newMemB = createAgentMemory({
+        type: 'episodic',
+        simDay,
+        simTime: timeStr,
+        content: dialogueResult.memoryB,
+        importance: dialogueResult.importance || Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 8 + 3))),
+        emotionalIntensity: dialogueResult.emotionalIntensity || Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 7 + 3))),
+        relatedAgentIds: [agentA.id],
+        relatedAgentNames: [agentA.name],
+        tags: [nearestBuilding.name, dialogueResult.sentiment],
+        sentiment: dialogueResult.sentiment
+      });
+
       setAgents(prev =>
         prev.map(a => {
           if (a.id === agentA.id) {
             const currentAffinity = a.affinity?.[agentB.id] || 0;
             const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaAtoB));
             const newMood = Math.max(-100, Math.min(100, a.state.mood + Math.round(dialogueResult.sentimentScore * 10)));
-            const newMem: any = {
-              id: `mem-${Date.now()}-A`,
-              simDay,
-              simTime: `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`,
-              content: dialogueResult.memoryA,
-              importance: Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 8 + 3))),
-              associatedAgentId: agentB.id,
-              associatedAgentName: agentB.name,
-              sentiment: dialogueResult.sentiment
-            };
 
             const updatedHistory = [
               ...(a.moodHistory || []),
-              { simTime: `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`, mood: newMood, stress: a.state.stress }
+              { simTime: timeStr, mood: newMood, stress: a.state.stress }
             ].slice(-10);
+
+            const updatedMemories = consolidateAndPruneMemories([newMemA, ...(a.memories || [])], simDay, 35);
+            const unreflected = (a.unreflectedMemoryCount || 0) + 1;
 
             const updatedA: Agent = {
               ...a,
               state: { ...a.state, mood: newMood },
               currentThought: `关于“${dialogueResult.topic}”，${agentB.name}的见解让我印象颇深。`,
               affinity: { ...a.affinity, [agentB.id]: newAffinity },
-              memories: [newMem, ...(a.memories || [])].slice(0, 15),
-              moodHistory: updatedHistory
+              memories: updatedMemories,
+              moodHistory: updatedHistory,
+              unreflectedMemoryCount: unreflected
             };
             syncAgentStateToCloud(updatedA);
+
+            // If accumulated enough unreflected memories, schedule reflection
+            if (unreflected >= 4) {
+              setTimeout(() => handleTriggerAgentReflection(a.id), 3000);
+            }
+
             return updatedA;
           }
 
@@ -646,31 +708,31 @@ export default function App() {
             const currentAffinity = a.affinity?.[agentA.id] || 0;
             const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaBtoA));
             const newMood = Math.max(-100, Math.min(100, a.state.mood + Math.round(dialogueResult.sentimentScore * 10)));
-            const newMem: any = {
-              id: `mem-${Date.now()}-B`,
-              simDay,
-              simTime: `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`,
-              content: dialogueResult.memoryB,
-              importance: Math.min(10, Math.max(3, Math.round(Math.abs(dialogueResult.sentimentScore) * 8 + 3))),
-              associatedAgentId: agentA.id,
-              associatedAgentName: agentA.name,
-              sentiment: dialogueResult.sentiment
-            };
 
             const updatedHistory = [
               ...(a.moodHistory || []),
-              { simTime: `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`, mood: newMood, stress: a.state.stress }
+              { simTime: timeStr, mood: newMood, stress: a.state.stress }
             ].slice(-10);
+
+            const updatedMemories = consolidateAndPruneMemories([newMemB, ...(a.memories || [])], simDay, 35);
+            const unreflected = (a.unreflectedMemoryCount || 0) + 1;
 
             const updatedB: Agent = {
               ...a,
               state: { ...a.state, mood: newMood },
               currentThought: `和${agentA.name}交流了“${dialogueResult.topic}”，收获不少。`,
               affinity: { ...a.affinity, [agentA.id]: newAffinity },
-              memories: [newMem, ...(a.memories || [])].slice(0, 15),
-              moodHistory: updatedHistory
+              memories: updatedMemories,
+              moodHistory: updatedHistory,
+              unreflectedMemoryCount: unreflected
             };
             syncAgentStateToCloud(updatedB);
+
+            // If accumulated enough unreflected memories, schedule reflection
+            if (unreflected >= 4) {
+              setTimeout(() => handleTriggerAgentReflection(a.id), 5000);
+            }
+
             return updatedB;
           }
 
@@ -687,6 +749,35 @@ export default function App() {
       setActiveBubbles(prev => prev.filter(b => b.id !== bubbleId));
       interactingAgentIdsRef.current.delete(agentA.id);
       interactingAgentIdsRef.current.delete(agentB.id);
+    }
+  };
+
+  // 3.5. Trigger Agent Long-Term Reflection & Memory Consolidation
+  const handleTriggerAgentReflection = async (agentId: string) => {
+    const target = agents.find(a => a.id === agentId);
+    if (!target) return;
+
+    setIsReflectingAgentId(agentId);
+    try {
+      const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
+      const recentMemories = (target.memories || []).slice(0, 10);
+      const reflectionResult = await requestAgentReflection(target, recentMemories, simDay, timeStr);
+
+      setAgents(prev =>
+        prev.map(a => {
+          if (a.id === agentId) {
+            const updated = applyReflectionToAgent(a, reflectionResult, simDay, timeStr);
+            syncAgentStateToCloud(updated);
+            return updated;
+          }
+          return a;
+        })
+      );
+      soundEngine.playChime();
+    } catch (err) {
+      console.warn('Agent reflection error:', err);
+    } finally {
+      setIsReflectingAgentId(null);
     }
   };
 
@@ -897,6 +988,10 @@ export default function App() {
             buildings={buildings}
             selectedAgentId={selectedAgentId || agents[0]?.id}
             onSelectAgent={setSelectedAgentId}
+            simDay={simDay}
+            simTime={`${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`}
+            onTriggerReflection={handleTriggerAgentReflection}
+            isReflecting={isReflectingAgentId === (selectedAgentId || agents[0]?.id)}
           />
         )}
 

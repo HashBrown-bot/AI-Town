@@ -109,6 +109,8 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
       mood: agent.state.mood,
       stress: agent.state.stress,
       currentActivity: agent.currentActivity,
+      currentGoal: agent.goal?.title || agent.currentGoal || '',
+      currentAction: agent.currentAction?.description || '',
       location: agent.currentBuildingId,
       updatedAt: Date.now()
     }, { merge: true });

@@ -1,10 +1,12 @@
-import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis } from '../types/town';
+import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult } from '../types/town';
 
 export async function requestAgentDialogue(
   agentA: Agent,
   agentB: Agent,
   location: Building,
-  recentEvents: string
+  recentEvents: string,
+  agentAContext?: string,
+  agentBContext?: string
 ): Promise<{
   topic: string;
   summary: string;
@@ -15,6 +17,8 @@ export async function requestAgentDialogue(
   affinityDeltaBtoA: number;
   memoryA: string;
   memoryB: string;
+  importance?: number;
+  emotionalIntensity?: number;
 }> {
   try {
     const res = await fetch('/api/ai/dialogue', {
@@ -28,7 +32,9 @@ export async function requestAgentDialogue(
           name: location.name,
           description: location.description
         },
-        recentEvents
+        recentEvents,
+        agentAContext,
+        agentBContext
       })
     });
 
@@ -74,7 +80,48 @@ export async function requestAgentDialogue(
       affinityDeltaAtoB: 4,
       affinityDeltaBtoA: 4,
       memoryA: `在${location.name}见到了${agentB.name}，两人聊得很愉快。`,
-      memoryB: `在${location.name}与${agentA.name}寒暄，感受到了积极的气息。`
+      memoryB: `在${location.name}与${agentA.name}寒暄，感受到了积极的气息。`,
+      importance: 6,
+      emotionalIntensity: 5
+    };
+  }
+}
+
+export async function requestAgentReflection(
+  agent: Agent,
+  recentMemories: AgentMemory[],
+  currentSimDay: number,
+  currentSimTime: string
+): Promise<ReflectionResult> {
+  try {
+    const res = await fetch('/api/ai/reflect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent,
+        recentMemories,
+        currentSimDay,
+        currentSimTime
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.warn('Agent reflection fallback triggered:', err);
+    return {
+      reflection: `近来在小镇的生活和交流，让我深感邻里之间的关照与真诚最为可贵。我希望能为社区做更多有价值的事。`,
+      type: 'reflection',
+      importance: 8,
+      emotionalIntensity: 6,
+      relatedAgentIds: recentMemories.flatMap(m => m.relatedAgentIds || []).slice(0, 2),
+      tags: ['日常顿悟', '社区归属'],
+      newGoal: '主动增进与邻里的互动，平衡日常作息',
+      moodDelta: 4,
+      stressDelta: -3
     };
   }
 }

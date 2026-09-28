@@ -42,6 +42,7 @@ interface ServerQuotaMetrics {
     analyze: number;
     event_impact: number;
     generate_agent: number;
+    reflect?: number;
   };
   recentCalls: {
     id: string;
@@ -395,7 +396,8 @@ export const QuotaCapacityPanel: React.FC<QuotaCapacityPanelProps> = ({ onRefres
           <div className="space-y-3 pt-1">
             {[
               { key: 'dialogue', label: '居民自主交谈 (Dialogue)', count: serverMetrics?.taskBreakdown.dialogue || 0, color: 'from-blue-500 to-cyan-500' },
-              { key: 'analyze', label: 'AI 全镇态势研判 (Town Analysis)', count: serverMetrics?.taskBreakdown.analyze || 0, color: 'from-indigo-500 to-purple-500' },
+              { key: 'reflect', label: '长期记忆反思与顿悟 (Reflection)', count: serverMetrics?.taskBreakdown.reflect || 0, color: 'from-violet-500 to-purple-500' },
+              { key: 'analyze', label: 'AI 全镇态势研判 (Town Analysis)', count: serverMetrics?.taskBreakdown.analyze || 0, color: 'from-indigo-500 to-blue-500' },
               { key: 'event_impact', label: '上帝视角事件推演 (Event Impact)', count: serverMetrics?.taskBreakdown.event_impact || 0, color: 'from-amber-500 to-orange-500' },
               { key: 'generate_agent', label: '个性化新居民生成 (Persona Studio)', count: serverMetrics?.taskBreakdown.generate_agent || 0, color: 'from-pink-500 to-rose-500' }
             ].map(item => {
