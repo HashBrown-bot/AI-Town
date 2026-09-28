@@ -1,0 +1,6 @@
+{
+  "name": "Aetheria - AI Agent 智能小镇与社会演化沙盒",
+  "description": "基于Gemini驱动的像素风格智能小镇，居民自主社交、记忆演化、云端数据持久化分析与实时行为态势仪表盘。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

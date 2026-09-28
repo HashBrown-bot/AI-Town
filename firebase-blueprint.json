@@ -1,0 +1,250 @@
+{
+  "entities": {
+    "InteractionRecord": {
+      "title": "InteractionRecord",
+      "description": "Represents an autonomous social dialogue and encounter between town residents.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique interaction event ID"
+        },
+        "participants": {
+          "type": "array",
+          "description": "Array of agent IDs involved"
+        },
+        "participantNames": {
+          "type": "array",
+          "description": "Display names of participants"
+        },
+        "location": {
+          "type": "string",
+          "description": "Building or location where interaction happened"
+        },
+        "topic": {
+          "type": "string",
+          "description": "Core conversation topic or summary"
+        },
+        "sentiment": {
+          "type": "string",
+          "enum": ["positive", "neutral", "conflict", "deep", "collaborative"],
+          "description": "Emotional valence classification"
+        },
+        "sentimentScore": {
+          "type": "number",
+          "description": "Quantitative sentiment score from -1.0 to +1.0"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Chronological list of dialogue utterances"
+        },
+        "relationshipImpact": {
+          "type": "object",
+          "description": "Delta of affinity and trust between agents"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Simulation or unix timestamp"
+        },
+        "simDay": {
+          "type": "number",
+          "description": "Simulation Day number"
+        },
+        "simTime": {
+          "type": "string",
+          "description": "Simulation time of day string (e.g. 14:30)"
+        }
+      },
+      "required": ["id", "participants", "location", "topic", "sentiment", "timestamp"]
+    },
+    "AgentState": {
+      "title": "AgentState",
+      "description": "State and profile of an AI town resident.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Agent unique identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Agent name"
+        },
+        "role": {
+          "type": "string",
+          "description": "Occupation or social role"
+        },
+        "mbti": {
+          "type": "string",
+          "description": "Personality MBTI"
+        },
+        "energy": {
+          "type": "number",
+          "description": "Current energy level 0-100"
+        },
+        "mood": {
+          "type": "number",
+          "description": "Current mood score -100 to +100"
+        },
+        "stress": {
+          "type": "number",
+          "description": "Current stress score 0-100"
+        },
+        "currentActivity": {
+          "type": "string",
+          "description": "What the agent is currently doing"
+        },
+        "location": {
+          "type": "string",
+          "description": "Current building/spot in town"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "TownEvent": {
+      "title": "TownEvent",
+      "description": "Environmental, administrative or custom user-triggered town event.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique event ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Event headline"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed event narrative"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["natural", "social", "emergency", "festival", "policy", "user_intervention"],
+          "description": "Event classification"
+        },
+        "impactSummary": {
+          "type": "string",
+          "description": "Summary of agent behavioral shifts caused by this event"
+        },
+        "targetBuilding": {
+          "type": "string",
+          "description": "Associated building if any"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Timestamp event occurred"
+        }
+      },
+      "required": ["id", "title", "description", "type", "timestamp"]
+    },
+    "TownAnalysis": {
+      "title": "TownAnalysis",
+      "description": "High-level AI summary of conflicts, romantic and rival alliances, and community trends.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Analysis ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Analysis report title"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Executive executive summary"
+        },
+        "coreConflicts": {
+          "type": "array",
+          "description": "List of active social conflicts identified"
+        },
+        "alliances": {
+          "type": "array",
+          "description": "List of tight social circles or alliances"
+        },
+        "emotionalVibe": {
+          "type": "string",
+          "description": "Overall town emotional atmosphere"
+        },
+        "recommendations": {
+          "type": "array",
+          "description": "Town governance recommendations"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["id", "title", "summary", "timestamp"]
+    },
+    "SimulationState": {
+      "title": "SimulationState",
+      "description": "Global persistent town simulation clock and environmental state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "State document ID"
+        },
+        "simDay": {
+          "type": "number",
+          "description": "Current simulation day"
+        },
+        "simHour": {
+          "type": "number",
+          "description": "Current simulation hour"
+        },
+        "simMinute": {
+          "type": "number",
+          "description": "Current simulation minute"
+        },
+        "weather": {
+          "type": "string",
+          "description": "Current town weather code"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "simDay", "simHour", "simMinute"]
+    }
+  },
+  "firestore": {
+    "/simulation_state/{stateId}": {
+      "schema": {
+        "$ref": "#/entities/SimulationState"
+      },
+      "description": "Global persistent town simulation clock, current day and environmental state."
+    },
+    "/interactions/{interactionId}": {
+      "schema": {
+        "$ref": "#/entities/InteractionRecord"
+      },
+      "description": "Logs of all conversations and encounters between town agents."
+    },
+    "/agents/{agentId}": {
+      "schema": {
+        "$ref": "#/entities/AgentState"
+      },
+      "description": "Live state and profiles of all town residents."
+    },
+    "/town_events/{eventId}": {
+      "schema": {
+        "$ref": "#/entities/TownEvent"
+      },
+      "description": "Log of global town events and user interventions."
+    },
+    "/analyses/{analysisId}": {
+      "schema": {
+        "$ref": "#/entities/TownAnalysis"
+      },
+      "description": "AI analysis reports on town social dynamics."
+    }
+  }
+}

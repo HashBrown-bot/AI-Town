@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Simulation State Collection (Global town clock, day, weather)
+    match /simulation_state/{stateId} {
+      allow read: if isValidId(stateId);
+      allow create, update: if isValidId(stateId)
+        && request.resource.data.id is string
+        && request.resource.data.simDay is number
+        && request.resource.data.simHour is number
+        && request.resource.data.simMinute is number;
+      allow delete: if false;
+    }
+
+    // Interactions Collection (Simulated town encounters and dialogues)
+    match /interactions/{interactionId} {
+      allow read: if isValidId(interactionId);
+      allow create, update: if isValidId(interactionId) 
+        && request.resource.data.id is string
+        && request.resource.data.participants is list
+        && request.resource.data.location is string
+        && request.resource.data.topic is string
+        && request.resource.data.sentiment is string;
+      allow delete: if false;
+    }
+
+    // Agents Collection (Resident status & profile)
+    match /agents/{agentId} {
+      allow read: if isValidId(agentId);
+      allow create, update: if isValidId(agentId)
+        && request.resource.data.id is string
+        && request.resource.data.name is string
+        && request.resource.data.role is string;
+      allow delete: if false;
+    }
+
+    // Town Events Collection (Events and user interventions)
+    match /town_events/{eventId} {
+      allow read: if isValidId(eventId);
+      allow create, update: if isValidId(eventId)
+        && request.resource.data.id is string
+        && request.resource.data.title is string
+        && request.resource.data.type is string;
+      allow delete: if false;
+    }
+
+    // AI Town Analyses Collection
+    match /analyses/{analysisId} {
+      allow read: if isValidId(analysisId);
+      allow create, update: if isValidId(analysisId)
+        && request.resource.data.id is string
+        && request.resource.data.title is string
+        && request.resource.data.summary is string;
+      allow delete: if false;
+    }
+  }
+}
