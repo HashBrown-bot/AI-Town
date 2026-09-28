@@ -17,7 +17,8 @@ import {
   UserCog,
   Zap,
   BrainCircuit,
-  Activity
+  Activity,
+  Radio
 } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
@@ -27,6 +28,7 @@ export type TabKey =
   | 'dialogues'
   | 'evolution'
   | 'personas'
+  | 'information'
   | 'events'
   | 'analyzer'
   | 'quota';
@@ -76,6 +78,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
     { key: 'dashboard', label: '社会动态', icon: <BarChart3 className="w-4 h-4" /> },
     { key: 'dialogues', label: '交互与记录', icon: <MessageSquareText className="w-4 h-4" /> },
     { key: 'evolution', label: '行为演变', icon: <TrendingUp className="w-4 h-4" /> },
+    { key: 'information', label: '情报与流言', icon: <Radio className="w-4 h-4 text-amber-400" /> },
     { key: 'personas', label: '个性化配置', icon: <UserCog className="w-4 h-4" /> },
     { key: 'events', label: '事件触发器', icon: <Zap className="w-4 h-4" /> },
     { key: 'analyzer', label: 'AI分析器', icon: <BrainCircuit className="w-4 h-4" /> },

@@ -284,15 +284,19 @@ export function calculateRelationshipModifier(
     return { modifier: 1.0 };
   }
 
-  // Find the acquaintance with highest affinity
+  // Find the acquaintance with highest multi-dimensional affinity/social bond
   let highestAffinity = -999;
   let bestFriend: Agent | undefined;
 
   otherAgents.forEach(other => {
     if (other.id === agent.id) return;
-    const aff = agent.affinity?.[other.id] ?? 0;
-    if (aff > highestAffinity) {
-      highestAffinity = aff;
+    const rel = agent.relationships?.[other.id];
+    const score = rel 
+      ? (rel.affection * 0.45 + rel.trust * 0.35 + rel.familiarity * 0.2 - rel.resentment * 0.3) 
+      : (agent.affinity?.[other.id] ?? 0);
+
+    if (score > highestAffinity) {
+      highestAffinity = score;
       bestFriend = other;
     }
   });

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Agent, Building, AgentMemory, MemoryType } from '../types/town';
+import { Agent, Building, AgentMemory, MemoryType, AgentKnowledge } from '../types/town';
 import { 
   TrendingUp, 
   Brain, 
@@ -20,10 +20,16 @@ import {
   Users, 
   HelpCircle,
   RefreshCw,
-  Eye
+  Eye,
+  Radio,
+  Lock,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { retrieveAgentMemories, DEFAULT_MEMORY_WEIGHTS, scoreMemory } from '../services/memorySystem';
 import { AgentDecisionPipeline } from './AgentDecisionPipeline';
+import { RelationshipInspector } from './RelationshipInspector';
+import { INFO_TYPE_CONFIG, SOURCE_TYPE_LABELS } from '../systems/InformationSystem';
 import { soundEngine } from '../utils/audioSystem';
 
 interface AgentEvolutionViewProps {
@@ -36,6 +42,7 @@ interface AgentEvolutionViewProps {
   weather?: string;
   onTriggerReflection?: (agentId: string) => Promise<void>;
   isReflecting?: boolean;
+  knowledgeItems?: AgentKnowledge[];
 }
 
 export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
@@ -47,10 +54,18 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
   simTime = '09:00',
   weather,
   onTriggerReflection,
-  isReflecting = false
+  isReflecting = false,
+  knowledgeItems = []
 }) => {
   const currentAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
   const currentBuilding = buildings.find(b => b.id === currentAgent.currentBuildingId);
+
+  // Resident Known Information Filter
+  const agentKnownItems = useMemo(() => {
+    return (knowledgeItems || []).filter(k => 
+      k.propagationChain.some(node => node.agentId === currentAgent.id)
+    );
+  }, [knowledgeItems, currentAgent.id]);
 
   // Active Memory Filter Tab
   const [memoryFilter, setMemoryFilter] = useState<'all' | MemoryType>('all');
@@ -392,71 +407,12 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
             </div>
           </div>
 
-          {/* Social Affinity Matrix */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm">
-            <h3 className="font-semibold text-sm text-white flex items-center gap-2 pb-3 border-b border-slate-800">
-              <Heart className="w-4 h-4 text-rose-400" />
-              <span>{currentAgent.name} 对全镇居民的好感与信任印象</span>
-            </h3>
-
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {agents
-                .filter(a => a.id !== currentAgent.id)
-                .map(targetA => {
-                  const score = currentAgent.affinity?.[targetA.id] || 0;
-                  const isPositive = score >= 0;
-                  // Look up relationship memory
-                  const relMem = currentAgent.memories?.find(
-                    m => m.type === 'relationship' && m.relatedAgentIds?.includes(targetA.id)
-                  );
-
-                  return (
-                    <div
-                      key={targetA.id}
-                      onClick={() => onSelectAgent(targetA.id)}
-                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer transition space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full"
-                            style={{ backgroundColor: targetA.spriteColor || '#3b82f6' }}
-                          />
-                          <span className="font-medium text-slate-200">{targetA.name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">({targetA.role})</span>
-                        </div>
-
-                        <span
-                          className={`font-mono font-semibold ${
-                            isPositive ? 'text-emerald-400' : 'text-rose-400'
-                          }`}
-                        >
-                          {isPositive ? `+${score}` : score}
-                        </span>
-                      </div>
-
-                      {/* Bar Visualization */}
-                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            isPositive ? 'bg-gradient-to-r from-blue-500 to-emerald-400' : 'bg-rose-500'
-                          }`}
-                          style={{
-                            width: `${Math.min(100, Math.max(8, (score + 100) / 2))}%`
-                          }}
-                        />
-                      </div>
-
-                      {relMem && (
-                        <p className="text-[11px] text-slate-400 italic line-clamp-1">
-                          "{relMem.content}"
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
+          {/* Relationship 2.0 Multi-Dimensional Bonds & Inspector */}
+          <RelationshipInspector
+            currentAgent={currentAgent}
+            allAgents={agents}
+            onSelectTargetAgent={onSelectAgent}
+          />
         </div>
       </div>
 
@@ -467,6 +423,101 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
         otherAgents={agents}
         weather={weather}
       />
+
+      {/* Resident Independent Knowledge & Rumor Horizon */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Radio className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <span>{currentAgent.name} 的独立认知与情报库 (Independent Knowledge Base)</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
+                  {agentKnownItems.length} 条已获悉情报
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                非全知视界：仅包含亲眼所见、他人告知、工作领会与听闻之传闻
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {agentKnownItems.length === 0 ? (
+          <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+            该居民目前尚未目击特殊事件或听闻小镇传闻，保持着安宁本职的生活视界。
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {agentKnownItems.map(item => {
+              const myNode = item.propagationChain.find(n => n.agentId === currentAgent.id);
+              const typeCfg = INFO_TYPE_CONFIG[item.infoType];
+              const isOrigin = item.originalSourceAgentId === currentAgent.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${typeCfg.badgeBg} ${typeCfg.badgeText} ${typeCfg.badgeBorder}`}>
+                        {typeCfg.icon} {typeCfg.label}
+                      </span>
+                      {item.isSecret && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>保守的机密</span>
+                        </span>
+                      )}
+                      {isOrigin && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                          亲历发起
+                        </span>
+                      )}
+                    </div>
+
+                    {myNode && (
+                      myNode.believed ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 flex items-center gap-0.5 font-mono">
+                          <CheckCircle2 className="w-2.5 h-2.5" />
+                          <span>深信 ({myNode.confidence}%)</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-400 border border-rose-800/40 flex items-center gap-0.5 font-mono">
+                          <XCircle className="w-2.5 h-2.5" />
+                          <span>心存怀疑</span>
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  <h4 className="font-bold text-slate-100">
+                    {item.subject}
+                  </h4>
+
+                  <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-900/50 p-2 rounded-lg border border-slate-800/50">
+                    “{myNode?.content || item.content}”
+                  </p>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 font-mono">
+                    <span>
+                      {myNode?.receivedFromAgentName ? `听自 @${myNode.receivedFromAgentName}` : '工作/亲身亲历'}
+                    </span>
+                    {myNode?.reason && (
+                      <span className="text-slate-400 italic truncate max-w-[200px]" title={myNode.reason}>
+                        {myNode.reason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Memory Retrieval Simulator & Inspector Panel */}
       <div className="bg-slate-900/90 border border-indigo-900/40 rounded-2xl p-5 shadow-sm space-y-4">

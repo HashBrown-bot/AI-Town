@@ -12,7 +12,7 @@ import {
   limit 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { InteractionRecord, Agent, TownEvent, TownAnalysis } from '../types/town';
+import { InteractionRecord, Agent, TownEvent, TownAnalysis, AgentKnowledge } from '../types/town';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -113,6 +113,8 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
       socialNeeds: agent.socialNeeds || null,
       cognitiveNeeds: agent.cognitiveNeeds || null,
       activeConditionTags: agent.activeConditionTags || [],
+      relationships: agent.relationships || null,
+      affinity: agent.affinity || null,
       currentActivity: agent.currentActivity,
       currentGoal: agent.goal?.title || agent.currentGoal || '',
       currentAction: agent.currentAction?.description || '',
@@ -282,6 +284,38 @@ export async function fetchCloudAnalysis(): Promise<TownAnalysis | null> {
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'analyses');
     return null;
+  }
+}
+
+// Sync knowledge/rumor item to Firestore
+export async function syncKnowledgeToCloud(item: AgentKnowledge): Promise<boolean> {
+  const path = `town_knowledge/${item.id}`;
+  try {
+    await setDoc(doc(db, 'town_knowledge', item.id), {
+      ...item,
+      updatedAt: Date.now()
+    }, { merge: true });
+    recordFirestoreWrite();
+    return true;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return false;
+  }
+}
+
+// Fetch cloud knowledge
+export async function fetchCloudKnowledge(): Promise<AgentKnowledge[]> {
+  try {
+    const q = query(collection(db, 'town_knowledge'), limit(50));
+    const snapshot = await getDocs(q);
+    const list: AgentKnowledge[] = [];
+    snapshot.forEach(doc => {
+      list.push(doc.data() as AgentKnowledge);
+    });
+    return list;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'town_knowledge');
+    return [];
   }
 }
 

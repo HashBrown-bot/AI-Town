@@ -1,4 +1,5 @@
 import { Agent, AgentMemory, MemoryRetrievalOptions, RetrievedMemoryContext, ReflectionResult, MemoryType } from '../types/town';
+import { applyReflectionRelationshipAdjustments, createDefaultRelationship, calculateAffinityProjection } from '../systems/RelationshipSystem';
 
 /**
  * Default weights for memory retrieval scoring:
@@ -350,13 +351,32 @@ export function applyReflectionToAgent(
     evidenceMemoryIds: reflection.evidenceMemoryIds || []
   });
 
-  // Apply affinity adjustments
-  const newAffinity = { ...(agent.affinity || {}) };
-  if (reflection.affinityAdjustments) {
+  // Apply multi-dimensional relationship & affinity adjustments
+  let intermediateAgent: Agent = { ...agent };
+  if (reflection.relationshipAdjustments) {
+    intermediateAgent = applyReflectionRelationshipAdjustments(
+      intermediateAgent,
+      reflection.relationshipAdjustments,
+      simDay,
+      simTime,
+      reflection.reflection
+    );
+  } else if (reflection.affinityAdjustments) {
+    // If only legacy affinityAdjustments provided, map to relationship affection/trust
+    const dimsMap: Record<string, any> = {};
     Object.entries(reflection.affinityAdjustments).forEach(([targetId, delta]) => {
-      const current = newAffinity[targetId] || 0;
-      newAffinity[targetId] = Math.max(-100, Math.min(100, current + delta));
+      dimsMap[targetId] = {
+        affection: delta,
+        trust: Math.round(delta * 0.75)
+      };
     });
+    intermediateAgent = applyReflectionRelationshipAdjustments(
+      intermediateAgent,
+      dimsMap,
+      simDay,
+      simTime,
+      reflection.reflection
+    );
   }
 
   // Apply emotional adjustments
@@ -373,10 +393,9 @@ export function applyReflectionToAgent(
   const prunedMemories = consolidateAndPruneMemories(updatedMemories, simDay, 35);
 
   return {
-    ...agent,
+    ...intermediateAgent,
     currentGoal: reflection.newGoal || agent.currentGoal || '在小镇探索生活与社交',
     currentThought: `【今日反思】：${reflection.reflection}`,
-    affinity: newAffinity,
     state: {
       ...agent.state,
       mood: newMood,

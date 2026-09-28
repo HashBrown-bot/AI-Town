@@ -231,11 +231,112 @@ export interface Agent {
   direction: Direction;
   isMoving: boolean;
   
-  // Social network bonds
-  affinity: Record<string, number>; // targetAgentId -> affinity score (-100 to 100)
+  // Social network bonds & Multi-Dimensional Relationship 2.0
+  affinity: Record<string, number>; // targetAgentId -> affinity score (-100 to 100) (backward compatibility projection)
+  relationships?: Record<string, Relationship>; // targetAgentId -> Multi-dimensional Relationship 2.0
   memories: AgentMemory[];
+  knowledge?: AgentKnowledge[]; // 居民个体拥有的知识/情报库 (仅知悉亲眼所见、传闻或工作所得)
   moodHistory: { simTime: string; mood: number; stress: number }[];
   unreflectedMemoryCount?: number; // 距离上次反思积累的未消化记忆计数
+}
+
+export type InformationType = 'knowledge' | 'secret' | 'rumor' | 'belief';
+
+export type KnowledgeSourceType = 
+  | 'direct_observation' // 亲眼看到
+  | 'told_by_other'      // 别人告诉
+  | 'town_event'         // 通过事件得知
+  | 'work_experience';   // 通过工作得知
+
+export interface PropagationNode {
+  agentId: string;
+  agentName: string;
+  simDay: number;
+  simTime: string;
+  receivedFromAgentId?: string;
+  receivedFromAgentName?: string;
+  content: string;
+  mutationNote?: string;
+  believed: boolean;
+  confidence: number;
+  reason: string;
+}
+
+export interface AgentKnowledge {
+  id: string;
+  subject: string;
+  content: string;
+  infoType: InformationType;
+  sourceAgentId: string | null;
+  sourceType: KnowledgeSourceType;
+  confidence: number;   // 0 到 100 自己对此消息的相信/确信程度
+  accuracy: number;     // 0 到 100 客观事实真实度 (经添油加醋或误解后降至极低)
+  importance: number;   // 0 到 100 话题重要性
+  isSecret: boolean;    // 是否为隐私秘密
+  createdAt: {
+    simDay: number;
+    simTime: string;
+    timestamp: number;
+  };
+  spreadCount: number;  // 已对外传播次数
+  
+  // 传播溯源与舆论网络追踪
+  originalSourceAgentId: string;
+  originalSourceAgentName?: string;
+  originalContent: string;
+  propagationChain: PropagationNode[];
+  believedByAgentIds: string[];
+  disbelievedByAgentIds: string[];
+  secretSharedWith?: string[]; // 已向其透露秘密的特定居民 ID
+  isDebunked?: boolean;        // 是否已被亲历者或权威辟谣纠正
+  debunkNote?: string;
+}
+
+export type RelationshipStage = 
+  | 'stranger'          // 陌生人
+  | 'acquaintance'      // 点头之交
+  | 'friend'            // 朋友
+  | 'close_friend'      // 挚友知己
+  | 'rival'             // 竞争对手
+  | 'enemy'             // 敌对宿怨
+  | 'romantic_interest' // 心动倾慕
+  | 'partner';          // 亲密伴侣
+
+export interface RelationshipDimensions {
+  familiarity: number; // 0 到 100 (熟识度)
+  trust: number;       // -100 到 +100 (信任度)
+  affection: number;   // -100 到 +100 (好感/喜爱度)
+  respect: number;     // -100 到 +100 (敬佩/敬重度)
+  attraction: number;  // 0 到 100 (吸引力/浪漫倾心)
+  rivalry: number;     // 0 到 100 (竞争心/对手意识)
+  resentment: number;  // 0 到 100 (芥蒂/怨恨度)
+  jealousy: number;    // 0 到 100 (嫉妒度)
+  dependency: number;  // 0 到 100 (情感/事务依赖感)
+}
+
+export interface RelationshipHistoryEntry {
+  id: string;
+  simDay: number;
+  simTime: string;
+  event: string;
+  stageTransition?: {
+    from: RelationshipStage;
+    to: RelationshipStage;
+  };
+  dimensionChanges?: Partial<Record<keyof RelationshipDimensions, number>>;
+  reason: string;
+  importance?: number;
+}
+
+export interface Relationship extends RelationshipDimensions {
+  targetAgentId: string;
+  targetAgentName?: string;
+  relationshipStage: RelationshipStage;
+  lastInteractionTime?: string;
+  lastInteractionDay?: number;
+  history: RelationshipHistoryEntry[];
+  dominantDynamic?: string; // 核心特征短语（如："虽有好感但心存戒备", "惺惺相惜的学术对手"）
+  summaryNote?: string;
 }
 
 export interface Building {
@@ -276,7 +377,14 @@ export interface InteractionRecord {
   sentiment: 'positive' | 'neutral' | 'conflict' | 'deep' | 'collaborative';
   sentimentScore: number; // -1.0 到 +1.0
   messages: DialogueUtterance[];
-  relationshipImpact: Record<string, { deltaAffinity: number; note?: string }>;
+  relationshipImpact: Record<string, { 
+    deltaAffinity: number; 
+    stage?: RelationshipStage;
+    dynamic?: string;
+    stageTransition?: { from: RelationshipStage; to: RelationshipStage };
+    dimensionChanges?: Partial<Record<keyof RelationshipDimensions, number>>;
+    note?: string;
+  }>;
   tags: string[];
 }
 
@@ -366,6 +474,7 @@ export interface ReflectionResult {
   tags: string[];
   newGoal?: string;
   affinityAdjustments?: Record<string, number>;
+  relationshipAdjustments?: Record<string, Partial<RelationshipDimensions>>;
   moodDelta?: number;
   stressDelta?: number;
   evidenceMemoryIds?: string[];

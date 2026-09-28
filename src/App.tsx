@@ -5,7 +5,8 @@ import {
   InteractionRecord, 
   TownEvent, 
   TownAnalysis, 
-  ActiveInteractionBubble 
+  ActiveInteractionBubble,
+  AgentKnowledge 
 } from './types/town';
 import { 
   INITIAL_AGENTS, 
@@ -19,6 +20,7 @@ import { DashboardOverview } from './components/DashboardOverview';
 import { LiveInteractionsView } from './components/LiveInteractionsView';
 import { AgentEvolutionView } from './components/AgentEvolutionView';
 import { AgentPersonaStudio } from './components/AgentPersonaStudio';
+import { InformationNetworkView } from './components/InformationNetworkView';
 import { TownEventsEngine } from './components/TownEventsEngine';
 import { TownAnalyzerView } from './components/TownAnalyzerView';
 import { AgentDetailModal } from './components/AgentDetailModal';
@@ -45,6 +47,12 @@ import {
   applyReflectionToAgent 
 } from './services/memorySystem';
 import { tickAgentAutonomousBehavior, applyDialogueOutcomeToNeeds } from './systems';
+import { updateRelationshipOnInteraction, calculateAffinityProjection, createDefaultRelationship } from './systems/RelationshipSystem';
+import { 
+  INITIAL_TOWN_KNOWLEDGE, 
+  processDialogueKnowledgeExchange, 
+  registerEventEyewitnessKnowledge 
+} from './systems/InformationSystem';
 import { soundEngine } from './utils/audioSystem';
 
 // Local Storage Keys for Instant Zero-Flash Hydration
@@ -52,6 +60,7 @@ const STORAGE_SIM_STATE = 'aetheria_sim_state_v2';
 const STORAGE_AGENTS = 'aetheria_agents_v2';
 const STORAGE_INTERACTIONS = 'aetheria_interactions_v2';
 const STORAGE_EVENTS = 'aetheria_events_v2';
+const STORAGE_KNOWLEDGE = 'aetheria_knowledge_v2';
 
 function loadStoredSimState() {
   console.group('[Aetheria 调试日志] 1. loadStoredSimState: 开始加载本地存储状态');
@@ -129,6 +138,19 @@ function loadStoredInteractions(): InteractionRecord[] | null {
   return null;
 }
 
+function loadStoredKnowledge(): AgentKnowledge[] {
+  try {
+    const item = localStorage.getItem(STORAGE_KNOWLEDGE);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.warn('Failed to load local knowledge:', err);
+  }
+  return INITIAL_TOWN_KNOWLEDGE;
+}
+
 export default function App() {
   // Navigation
   const [currentTab, setCurrentTab] = useState<TabKey>('canvas');
@@ -147,6 +169,7 @@ export default function App() {
   const [interactions, setInteractions] = useState<InteractionRecord[]>(() => loadStoredInteractions() || []);
   const [events, setEvents] = useState<TownEvent[]>(INITIAL_EVENTS);
   const [latestAnalysis, setLatestAnalysis] = useState<TownAnalysis>(INITIAL_ANALYSIS);
+  const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>(loadStoredKnowledge);
 
   // Active Conversations on Canvas
   const [activeBubbles, setActiveBubbles] = useState<ActiveInteractionBubble[]>([]);
@@ -196,15 +219,23 @@ export default function App() {
     }
   }, [interactions]);
 
+  // Persist knowledge items to LocalStorage whenever modified
+  useEffect(() => {
+    if (knowledgeItems.length > 0) {
+      localStorage.setItem(STORAGE_KNOWLEDGE, JSON.stringify(knowledgeItems));
+    }
+  }, [knowledgeItems]);
+
   // Synchronize on beforeunload
   useEffect(() => {
     const handleBeforeUnload = () => {
       localStorage.setItem(STORAGE_SIM_STATE, JSON.stringify({ simDay, simHour, simMinute, weather }));
+      localStorage.setItem(STORAGE_KNOWLEDGE, JSON.stringify(knowledgeItems));
       syncSimulationStateToCloud({ simDay, simHour, simMinute, weather });
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [simDay, simHour, simMinute, weather]);
+  }, [simDay, simHour, simMinute, weather, knowledgeItems]);
 
   // 2. Initial Firebase boot, cloud hydration and connection test
   useEffect(() => {
@@ -621,6 +652,36 @@ export default function App() {
       }, 2500);
 
       // Construct complete InteractionRecord
+      // 2. Compute Multi-Dimensional Relationship 2.0 Bilateral Evolution
+      const relOutcome = updateRelationshipOnInteraction({
+        agentA,
+        agentB,
+        sentiment: dialogueResult.sentiment,
+        sentimentScore: dialogueResult.sentimentScore,
+        topic: dialogueResult.topic,
+        summary: dialogueResult.summary,
+        locationName: nearestBuilding.name,
+        simDay,
+        simTime: timeStr,
+        importance: dialogueResult.importance,
+        emotionalIntensity: dialogueResult.emotionalIntensity,
+        suggestedDeltaAtoB: dialogueResult.affinityDeltaAtoB,
+        suggestedDeltaBtoA: dialogueResult.affinityDeltaBtoA
+      });
+
+      // 2.2 Execute Bilateral Knowledge / Secret / Rumor propagation & mutation
+      const knowledgeExchange = processDialogueKnowledgeExchange(
+        agentA,
+        agentB,
+        knowledgeItems,
+        relOutcome.updatedRelAtoB,
+        relOutcome.updatedRelBtoA,
+        simDay,
+        timeStr,
+        nearestBuilding.name
+      );
+      setKnowledgeItems(knowledgeExchange.updatedKnowledgeBase);
+
       const newRecord: InteractionRecord = {
         id: `interaction-${Date.now()}`,
         timestamp: Date.now(),
@@ -635,8 +696,20 @@ export default function App() {
         sentimentScore: dialogueResult.sentimentScore,
         messages: dialogueResult.dialogue,
         relationshipImpact: {
-          [agentA.id]: { deltaAffinity: dialogueResult.affinityDeltaAtoB, note: dialogueResult.memoryA },
-          [agentB.id]: { deltaAffinity: dialogueResult.affinityDeltaBtoA, note: dialogueResult.memoryB }
+          [agentA.id]: { 
+            deltaAffinity: dialogueResult.affinityDeltaAtoB, 
+            stage: relOutcome.updatedRelAtoB.relationshipStage,
+            dynamic: relOutcome.updatedRelAtoB.dominantDynamic,
+            stageTransition: relOutcome.stageTransitionAtoB,
+            note: dialogueResult.memoryA 
+          },
+          [agentB.id]: { 
+            deltaAffinity: dialogueResult.affinityDeltaBtoA, 
+            stage: relOutcome.updatedRelBtoA.relationshipStage,
+            dynamic: relOutcome.updatedRelBtoA.dominantDynamic,
+            stageTransition: relOutcome.stageTransitionBtoA,
+            note: dialogueResult.memoryB 
+          }
         },
         tags: [nearestBuilding.name, dialogueResult.sentiment]
       };
@@ -674,8 +747,10 @@ export default function App() {
       setAgents(prev =>
         prev.map(a => {
           if (a.id === agentA.id) {
-            const currentAffinity = a.affinity?.[agentB.id] || 0;
-            const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaAtoB));
+            const updatedRels = { ...(a.relationships || {}) };
+            updatedRels[agentB.id] = relOutcome.updatedRelAtoB;
+            const newAffinity = calculateAffinityProjection(relOutcome.updatedRelAtoB);
+
             const needsOutcome = applyDialogueOutcomeToNeeds(a, dialogueResult.sentiment, dialogueResult.sentimentScore);
 
             const updatedHistory = [
@@ -690,6 +765,7 @@ export default function App() {
               ...a,
               ...needsOutcome,
               currentThought: `关于“${dialogueResult.topic}”，${agentB.name}的见解让我印象颇深。`,
+              relationships: updatedRels,
               affinity: { ...a.affinity, [agentB.id]: newAffinity },
               memories: updatedMemories,
               moodHistory: updatedHistory,
@@ -706,8 +782,10 @@ export default function App() {
           }
 
           if (a.id === agentB.id) {
-            const currentAffinity = a.affinity?.[agentA.id] || 0;
-            const newAffinity = Math.max(-100, Math.min(100, currentAffinity + dialogueResult.affinityDeltaBtoA));
+            const updatedRels = { ...(a.relationships || {}) };
+            updatedRels[agentA.id] = relOutcome.updatedRelBtoA;
+            const newAffinity = calculateAffinityProjection(relOutcome.updatedRelBtoA);
+
             const needsOutcome = applyDialogueOutcomeToNeeds(a, dialogueResult.sentiment, dialogueResult.sentimentScore);
 
             const updatedHistory = [
@@ -722,6 +800,7 @@ export default function App() {
               ...a,
               ...needsOutcome,
               currentThought: `和${agentA.name}交流了“${dialogueResult.topic}”，收获不少。`,
+              relationships: updatedRels,
               affinity: { ...a.affinity, [agentA.id]: newAffinity },
               memories: updatedMemories,
               moodHistory: updatedHistory,
@@ -844,6 +923,18 @@ export default function App() {
       })
     );
 
+    // Register eyewitness knowledge: ONLY residents present at event location discover this!
+    const targetBuildingObj = buildings.find(b => b.id === event.targetBuilding);
+    const eyewitnessResult = registerEventEyewitnessKnowledge(
+      event,
+      agents,
+      knowledgeItems,
+      simDay,
+      `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`,
+      targetBuildingObj
+    );
+    setKnowledgeItems(eyewitnessResult.updatedKnowledgeBase);
+
     // If event has a target building, send residents there!
     if (event.targetBuilding) {
       const targetB = buildings.find(b => b.id === event.targetBuilding);
@@ -862,6 +953,26 @@ export default function App() {
         );
       }
     }
+  };
+
+  // 6. Knowledge System Handlers
+  const handleInjectKnowledge = (newKnowledge: AgentKnowledge) => {
+    setKnowledgeItems(prev => [newKnowledge, ...prev]);
+  };
+
+  const handleDebunkRumor = (knowledgeId: string, debunkNote: string) => {
+    setKnowledgeItems(prev => prev.map(k => {
+      if (k.id === knowledgeId) {
+        return {
+          ...k,
+          isDebunked: true,
+          debunkNote,
+          accuracy: 95,
+          infoType: 'knowledge' as const
+        };
+      }
+      return k;
+    }));
   };
 
   // 6. Agent Configuration Studio Actions
@@ -1009,6 +1120,22 @@ export default function App() {
             weather={weather}
             onTriggerReflection={handleTriggerAgentReflection}
             isReflecting={isReflectingAgentId === (selectedAgentId || agents[0]?.id)}
+            knowledgeItems={knowledgeItems}
+          />
+        )}
+
+        {currentTab === 'information' && (
+          <InformationNetworkView
+            knowledgeItems={knowledgeItems}
+            agents={agents}
+            simDay={simDay}
+            simTime={`${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`}
+            onInjectKnowledge={handleInjectKnowledge}
+            onDebunkRumor={handleDebunkRumor}
+            onSelectAgent={id => {
+              setSelectedAgentId(id);
+              setCurrentTab('evolution');
+            }}
           />
         )}
 

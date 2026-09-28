@@ -13,6 +13,7 @@ import {
   Tag 
 } from 'lucide-react';
 import { generateNewAgentPersona } from '../services/aiTownService';
+import { ensureAgentRelationships, calculateAffinityProjection } from '../systems/RelationshipSystem';
 import { soundEngine } from '../utils/audioSystem';
 
 interface AgentPersonaStudioProps {
@@ -182,6 +183,7 @@ export const AgentPersonaStudio: React.FC<AgentPersonaStudioProps> = ({
         speed: 1.2,
         direction: 'down',
         isMoving: false,
+        relationships: ensureAgentRelationships({ id: newId }, agents.map(a => ({ id: a.id, name: a.name }))),
         affinity: {},
         memories: [
           {

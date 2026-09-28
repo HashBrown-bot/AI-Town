@@ -98,6 +98,14 @@
           "type": "string",
           "description": "Current building/spot in town"
         },
+        "relationships": {
+          "type": "object",
+          "description": "Multi-dimensional Relationship 2.0 social bonds"
+        },
+        "affinity": {
+          "type": "object",
+          "description": "Projected social affinity mapping"
+        },
         "updatedAt": {
           "type": "number",
           "description": "Last update timestamp"
@@ -213,6 +221,56 @@
         }
       },
       "required": ["id", "simDay", "simHour", "simMinute"]
+    },
+    "AgentKnowledge": {
+      "title": "AgentKnowledge",
+      "description": "Knowledge, secret, rumor or belief in the town propagation network.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique knowledge ID"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Headline or subject"
+        },
+        "content": {
+          "type": "string",
+          "description": "Current information content"
+        },
+        "infoType": {
+          "type": "string",
+          "enum": ["knowledge", "secret", "rumor", "belief"],
+          "description": "Nature of the information"
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["direct_observation", "told_by_other", "town_event", "work_experience"],
+          "description": "How the info was acquired"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Belief confidence score 0-100"
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "Truth accuracy 0-100"
+        },
+        "importance": {
+          "type": "number",
+          "description": "Importance score 0-100"
+        },
+        "isSecret": {
+          "type": "boolean",
+          "description": "Whether this is a secret"
+        },
+        "spreadCount": {
+          "type": "number",
+          "description": "Total propagation spread count"
+        }
+      },
+      "required": ["id", "subject", "content", "infoType", "sourceType"]
     }
   },
   "firestore": {
@@ -245,6 +303,12 @@
         "$ref": "#/entities/TownAnalysis"
       },
       "description": "AI analysis reports on town social dynamics."
+    },
+    "/town_knowledge/{knowledgeId}": {
+      "schema": {
+        "$ref": "#/entities/AgentKnowledge"
+      },
+      "description": "Town knowledge, secrets, rumors and beliefs propagation network."
     }
   }
 }

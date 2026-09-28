@@ -148,6 +148,16 @@ app.post('/api/ai/dialogue', async (req, res) => {
   }
 
   try {
+    const relAtoB = agentA.relationships?.[agentB.id];
+    const relBtoA = agentB.relationships?.[agentA.id];
+    const relDescA = relAtoB 
+      ? `阶段【${relAtoB.relationshipStage}】(${relAtoB.dominantDynamic || '日常往来'}), 熟识:${relAtoB.familiarity}, 信任:${relAtoB.trust}, 好感:${relAtoB.affection}, 敬重:${relAtoB.respect}, 竞争心:${relAtoB.rivalry}, 芥蒂:${relAtoB.resentment}`
+      : `好感度: ${agentA.affinity?.[agentB.id] || 0}`;
+
+    const relDescB = relBtoA 
+      ? `阶段【${relBtoA.relationshipStage}】(${relBtoA.dominantDynamic || '日常往来'}), 熟识:${relBtoA.familiarity}, 信任:${relBtoA.trust}, 好感:${relBtoA.affection}, 敬重:${relBtoA.respect}, 竞争心:${relBtoA.rivalry}, 芥蒂:${relBtoA.resentment}`
+      : `好感度: ${agentB.affinity?.[agentA.id] || 0}`;
+
     const prompt = `
 你是一个社会模拟仿真世界的叙事引擎。在像素小镇"${location?.name || '小镇'}"（功能：${location?.description || '公共设施'}）中，两位居民发生了一次偶遇交谈。
 
@@ -158,7 +168,7 @@ MBTI与性格: ${agentA.mbti}, 大五人格(开放性:${agentA.bigFive?.openness
 当前心情/状态: 心情${agentA.state?.mood}, 压力${agentA.state?.stress}, 当前活动: ${agentA.currentActivity}
 当前追求目标: ${agentA.currentGoal || '维持小镇日常并探索生活'}
 核心背景与怪癖: ${agentA.bio} | ${agentA.quirks?.join(', ')}
-对 ${agentB.name} 的好感度: ${agentA.affinity?.[agentB.id] || 0} (-100到+100)
+对 ${agentB.name} 的多维关系: ${relDescA}
 【居民 A 检索出的长期记忆与反思】:
 ${agentAContext || '暂无对该居民的深刻历史往来，初次正常接触。'}
 
@@ -169,7 +179,7 @@ MBTI与性格: ${agentB.mbti}, 大五人格(开放性:${agentB.bigFive?.openness
 当前心情/状态: 心情${agentB.state?.mood}, 压力${agentB.state?.stress}, 当前活动: ${agentB.currentActivity}
 当前追求目标: ${agentB.currentGoal || '维持小镇日常并探索生活'}
 核心背景与怪癖: ${agentB.bio} | ${agentB.quirks?.join(', ')}
-对 ${agentA.name} 的好感度: ${agentB.affinity?.[agentA.id] || 0} (-100到+100)
+对 ${agentA.name} 的多维关系: ${relDescB}
 【居民 B 检索出的长期记忆与反思】:
 ${agentBContext || '暂无对该居民的深刻历史往来，初次正常接触。'}
 

@@ -1,5 +1,7 @@
-import { Agent, Building, TownEvent, TownAnalysis } from '../types/town';
+import { Agent, Building, TownEvent, TownAnalysis, Relationship } from '../types/town';
 import { ensureAgentFullNeeds } from '../systems/NeedsSystem';
+import { ensureAgentRelationships, calculateAffinityProjection } from '../systems/RelationshipSystem';
+import { INITIAL_TOWN_KNOWLEDGE, getAgentPersonalKnowledge } from '../systems/InformationSystem';
 
 export const INITIAL_BUILDINGS: Building[] = [
   {
@@ -935,11 +937,183 @@ const RAW_INITIAL_AGENTS: Agent[] = [
   }
 ];
 
+const AGENTS_META = RAW_INITIAL_AGENTS.map(a => ({ id: a.id, name: a.name }));
+
+// Curated initial relationship milestones for core pairs
+const CURATED_INITIAL_RELATIONSHIPS: Record<string, Record<string, Partial<Relationship>>> = {
+  'agent-4': {
+    'agent-5': {
+      familiarity: 65,
+      trust: 25,
+      affection: 10,
+      respect: 75,
+      attraction: 10,
+      rivalry: 68,
+      resentment: 35,
+      jealousy: 0,
+      dependency: 15,
+      relationshipStage: 'rival',
+      dominantDynamic: '惺惺相惜的劲敌：虽有工坊能耗与安全分歧，但深佩其机械才能',
+      history: [
+        {
+          id: 'init-hist-4-5-1',
+          simDay: 1,
+          simTime: '09:00',
+          event: '就工坊用电与安全规约发生激烈原则性辩论',
+          stageTransition: { from: 'acquaintance', to: 'rival' },
+          dimensionChanges: { trust: -12, rivalry: 18, resentment: 15 },
+          reason: '市政安全条例与工程自由度之间的诉求冲突',
+          importance: 8
+        },
+        {
+          id: 'init-hist-4-5-2',
+          simDay: 1,
+          simTime: '11:30',
+          event: '共同排查修复工坊高压蒸汽阀门，危机中互见魄力',
+          dimensionChanges: { trust: 15, respect: 12 },
+          reason: '突发隐患面前表现出的高度专业与果决',
+          importance: 7
+        }
+      ]
+    }
+  },
+  'agent-5': {
+    'agent-4': {
+      familiarity: 65,
+      trust: 20,
+      affection: 15,
+      respect: 70,
+      attraction: 10,
+      rivalry: 65,
+      resentment: 30,
+      jealousy: 0,
+      dependency: 10,
+      relationshipStage: 'rival',
+      dominantDynamic: '规矩繁琐但极度负责的市政劲敌',
+      history: [
+        {
+          id: 'init-hist-5-4-1',
+          simDay: 1,
+          simTime: '09:00',
+          event: '辩驳市政厅的安全管制，坚持机械发条实验自由',
+          stageTransition: { from: 'acquaintance', to: 'rival' },
+          dimensionChanges: { trust: -10, rivalry: 15 },
+          reason: '不愿受制于官僚条框，但认可对方守护小镇的初心',
+          importance: 8
+        }
+      ]
+    }
+  },
+  'agent-1': {
+    'agent-3': {
+      familiarity: 85,
+      trust: 80,
+      affection: 85,
+      respect: 65,
+      attraction: 20,
+      rivalry: 0,
+      resentment: 0,
+      jealousy: 0,
+      dependency: 40,
+      relationshipStage: 'close_friend',
+      dominantDynamic: '晨光暖意生活圈：互相分担清晨心意与烘焙咖啡温暖',
+      history: [
+        {
+          id: 'init-hist-1-3-1',
+          simDay: 1,
+          simTime: '07:00',
+          event: '拂晓互送第一杯手冲咖啡与刚出炉牛角包',
+          stageTransition: { from: 'friend', to: 'close_friend' },
+          dimensionChanges: { affection: 15, trust: 12, familiarity: 10 },
+          reason: '多年开店邻里积累的深厚温情',
+          importance: 7
+        }
+      ]
+    }
+  },
+  'agent-2': {
+    'agent-5': {
+      familiarity: 70,
+      trust: 65,
+      affection: 50,
+      respect: 85,
+      attraction: 30,
+      rivalry: 25,
+      resentment: 0,
+      jealousy: 0,
+      dependency: 35,
+      relationshipStage: 'friend',
+      dominantDynamic: '穹顶探秘学术同盟：古籍天象与精密机械的共同求索',
+      history: [
+        {
+          id: 'init-hist-2-5-1',
+          simDay: 1,
+          simTime: '09:30',
+          event: '就星图残片与古代发条天体仪展开深度推演',
+          dimensionChanges: { respect: 20, trust: 15 },
+          reason: '在对方身上看到了少有的求真精神与工程洞察力',
+          importance: 8
+        }
+      ]
+    },
+    'agent-7': {
+      familiarity: 55,
+      trust: 30,
+      affection: 45,
+      respect: 55,
+      attraction: 35,
+      rivalry: 55,
+      resentment: 15,
+      jealousy: 0,
+      dependency: 10,
+      relationshipStage: 'rival',
+      dominantDynamic: '严谨考据派与感性抒情派的审美博弈',
+      history: [
+        {
+          id: 'init-hist-2-7-1',
+          simDay: 1,
+          simTime: '09:20',
+          event: '在中央喷泉边就诗歌抒情与文献真实的界限发生辩论',
+          stageTransition: { from: 'acquaintance', to: 'rival' },
+          dimensionChanges: { rivalry: 18, trust: -8, respect: 10 },
+          reason: '对小镇史诗的表述存在考据与浪漫的理念分歧',
+          importance: 7
+        }
+      ]
+    }
+  }
+};
+
 export const INITIAL_AGENTS: Agent[] = RAW_INITIAL_AGENTS.map(agent => {
   const full = ensureAgentFullNeeds(agent);
+  const baseRels = ensureAgentRelationships(agent, AGENTS_META);
+
+  // Apply curated overrides if available
+  const curated = CURATED_INITIAL_RELATIONSHIPS[agent.id];
+  if (curated) {
+    Object.entries(curated).forEach(([targetId, override]) => {
+      if (baseRels[targetId]) {
+        baseRels[targetId] = {
+          ...baseRels[targetId],
+          ...override,
+          history: override.history || baseRels[targetId].history
+        };
+      }
+    });
+  }
+
+  // Sync projected affinity
+  const syncedAffinity: Record<string, number> = { ...(agent.affinity || {}) };
+  Object.entries(baseRels).forEach(([tId, rel]) => {
+    syncedAffinity[tId] = calculateAffinityProjection(rel);
+  });
+
   return {
     ...agent,
     ...full,
+    relationships: baseRels,
+    affinity: syncedAffinity,
+    knowledge: getAgentPersonalKnowledge(agent.id, INITIAL_TOWN_KNOWLEDGE)
   };
 });
 

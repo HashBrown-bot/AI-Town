@@ -96,25 +96,47 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const posA = nodePositions[agentA.id];
         if (!posA) return;
 
-        Object.entries(agentA.affinity || {}).forEach(([targetId, score]) => {
-          const posB = nodePositions[targetId];
-          if (!posB || agentA.id >= targetId) return; // avoid duplicate lines
+        agents.forEach(agentB => {
+          if (agentA.id >= agentB.id) return; // avoid duplicate lines
+          const posB = nodePositions[agentB.id];
+          if (!posB) return;
 
-          const isFriction = score < 0;
+          const rel = agentA.relationships?.[agentB.id];
+          const score = rel 
+            ? (rel.affection * 0.45 + rel.trust * 0.35 + rel.respect * 0.2 - rel.resentment * 0.4)
+            : (agentA.affinity?.[agentB.id] ?? 0);
+          
+          const stage = rel?.relationshipStage || (score < -20 ? 'enemy' : score > 40 ? 'close_friend' : score > 15 ? 'friend' : 'acquaintance');
           const absScore = Math.abs(score);
-          const alpha = Math.min(0.8, Math.max(0.15, absScore / 80));
+          const alpha = Math.min(0.85, Math.max(0.2, absScore / 70));
 
           ctx.beginPath();
           ctx.moveTo(posA.x, posA.y);
           ctx.lineTo(posB.x, posB.y);
 
-          if (isFriction) {
+          if (stage === 'enemy') {
+            ctx.strokeStyle = `rgba(244, 63, 94, ${alpha})`;
+            ctx.lineWidth = 1.5 + (absScore / 30);
+            ctx.setLineDash([4, 4]);
+          } else if (stage === 'rival') {
+            ctx.strokeStyle = `rgba(245, 158, 11, ${alpha})`;
+            ctx.lineWidth = 1.5 + (absScore / 35);
+            ctx.setLineDash([5, 3]);
+          } else if (stage === 'partner' || stage === 'romantic_interest') {
+            ctx.strokeStyle = `rgba(236, 72, 153, ${alpha})`;
+            ctx.lineWidth = 2 + (absScore / 30);
+            ctx.setLineDash([]);
+          } else if (stage === 'close_friend') {
+            ctx.strokeStyle = `rgba(20, 184, 166, ${alpha})`;
+            ctx.lineWidth = 2 + (absScore / 30);
+            ctx.setLineDash([]);
+          } else if (score < 0) {
             ctx.strokeStyle = `rgba(239, 68, 68, ${alpha})`;
             ctx.lineWidth = 1 + (absScore / 30);
             ctx.setLineDash([4, 4]);
           } else {
             ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
-            ctx.lineWidth = 1 + (absScore / 25);
+            ctx.lineWidth = 1 + (absScore / 35);
             ctx.setLineDash([]);
           }
 
