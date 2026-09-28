@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Agent, Building } from '../types/town';
-import { X, MessageSquare, TrendingUp, Sparkles, MapPin, Battery, Smile, AlertCircle, Target, Compass, Footprints, Flame } from 'lucide-react';
+import { X, MessageSquare, TrendingUp, Sparkles, MapPin, Battery, Smile, AlertCircle, Target, Compass, Footprints, Flame, ChevronDown, ChevronUp } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
 interface AgentDetailModalProps {
@@ -18,6 +18,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   onGoToEvolution,
   onForceInteraction
 }) => {
+  const [showAllScores, setShowAllScores] = useState<boolean>(false);
   if (!agent) return null;
 
   const currentAction = agent.plan?.steps[agent.plan.currentStepIndex] || agent.currentAction;
@@ -58,13 +59,13 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
 
       {/* Autonomous Decision System Showcase (Needs -> Goal -> Plan -> Action) */}
       <div className="py-3 space-y-3 text-xs">
-        {/* Active Goal & Motivation */}
+        {/* Active Goal & Utility AI Choice */}
         {currentGoal && (
           <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/50 to-indigo-950/50 border border-blue-800/40 space-y-1.5">
             <div className="flex items-center justify-between text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
               <span className="flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 text-blue-400" />
-                <span>自主追求目标 (Active Goal)</span>
+                <span>Utility AI 首选目标 (Top Goal)</span>
               </span>
               <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
                 紧急度: {currentGoal.urgency}/10
@@ -74,8 +75,49 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               {currentGoal.title}
             </div>
             <div className="text-[11px] text-slate-300 pt-0.5 border-t border-blue-900/40">
-              <span className="text-indigo-400 font-semibold">【为什么做这事】: </span>
+              <span className="text-indigo-400 font-semibold">【决策动机】: </span>
               <span>{currentGoal.motivation}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Utility AI Candidate Actions Dashboard */}
+        {agent.utilityEvaluations && agent.utilityEvaluations.length > 0 && (
+          <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-indigo-950 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">
+              <span>Utility AI 候选行为评估</span>
+              <button
+                onClick={() => setShowAllScores(!showAllScores)}
+                className="text-slate-400 hover:text-indigo-300 font-mono flex items-center gap-0.5 text-[9px] transition"
+              >
+                <span>{showAllScores ? '收起 (Top 3)' : `展开全部 (${agent.utilityEvaluations.length})`}</span>
+                {showAllScores ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+            <div className="space-y-1 max-h-48 overflow-y-auto no-scrollbar">
+              {(showAllScores ? agent.utilityEvaluations : agent.utilityEvaluations.slice(0, 3)).map((u, i) => (
+                <div key={u.action} className="text-[11px] py-1 border-b border-slate-900/60 last:border-b-0">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-slate-300">
+                      <span>{u.icon}</span>
+                      <span className="font-medium">{u.label}</span>
+                      {i === 0 && <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-mono">首选</span>}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 bg-slate-800 rounded-full h-1 overflow-hidden">
+                        <div className={`h-full ${i === 0 ? 'bg-amber-400' : 'bg-indigo-400'}`} style={{ width: `${u.score}%` }} />
+                      </div>
+                      <span className="font-mono text-[10px] text-slate-300 w-6 text-right font-bold">{u.score}</span>
+                    </div>
+                  </div>
+                  {showAllScores && (
+                    <div className="text-[9px] text-slate-500 font-mono flex items-center justify-between pt-0.5 px-0.5">
+                      <span className="truncate pr-1">需:{u.factors.needScore} · 特:×{u.factors.personalityModifier} · 目:×{u.factors.goalModifier}</span>
+                      <span className="text-slate-400 shrink-0">×{u.factors.relationshipModifier}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Agent, Building, AgentNeeds } from '../types/town';
+import React, { useState } from 'react';
+import { Agent, Building, AgentNeeds, UtilityActionScore } from '../types/town';
 import { 
   Target, 
   Footprints, 
@@ -16,20 +16,31 @@ import {
   Sliders,
   Shield,
   Coffee,
-  Smile
+  Smile,
+  BarChart3,
+  Flame,
+  Info,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+import { evaluateAgentUtilityActions } from '../systems/UtilitySystem';
 
 interface AgentDecisionPipelineProps {
   agent: Agent;
   buildings: Building[];
   otherAgents: Agent[];
+  weather?: string;
 }
 
 export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
   agent,
   buildings,
-  otherAgents
+  otherAgents,
+  weather
 }) => {
+  const [selectedUtilityAction, setSelectedUtilityAction] = useState<string | null>(null);
+  const [showFormulaDetails, setShowFormulaDetails] = useState<boolean>(false);
+
   const needs: AgentNeeds = agent.needs || {
     energy: agent.state.energy || 80,
     hunger: 25,
@@ -49,6 +60,14 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
   const currentBuilding = buildings.find(b => b.id === agent.currentBuildingId);
   const targetBuilding = buildings.find(b => b.id === currentGoal?.targetBuildingId);
   const targetAgent = otherAgents.find(a => a.id === currentGoal?.targetAgentId);
+
+  // Compute live utility action evaluations if agent doesn't have cached evaluations
+  const utilityScores: UtilityActionScore[] = agent.utilityEvaluations && agent.utilityEvaluations.length > 0
+    ? agent.utilityEvaluations
+    : evaluateAgentUtilityActions(agent, buildings, otherAgents, currentBuilding, weather).allScores;
+
+  const topUtility = utilityScores[0];
+  const inspectingAction = utilityScores.find(u => u.action === selectedUtilityAction) || topUtility;
 
   // Configuration for 10 needs meters
   const needsConfig: {
@@ -157,18 +176,18 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
             <Compass className="w-4 h-4" />
           </div>
           <div>
             <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <span>自主行为决策心智流水线 (Needs → Goal → Plan → Action)</span>
+              <span>Utility AI 自主行为决策引擎 (Utility-Driven Decision Pipeline)</span>
               <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
-                BDI Agent Architecture
+                Utility Score Engine
               </span>
             </h3>
             <p className="text-xs text-slate-400">
-              告别随机移动，基于10项自主需求、性格特质与目标规划驱动的真实社会行为闭环
+              普通实时微观行为由 Utility AI 本地自主求优完成；Gemini 专注长期反思与叙事对话
             </p>
           </div>
         </div>
@@ -177,8 +196,152 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
         <div className="flex items-center gap-2 text-xs font-mono">
           <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>心智自主运行中</span>
+            <span>首选行为: {topUtility?.icon} {topUtility?.label} ({topUtility?.score}分)</span>
           </span>
+        </div>
+      </div>
+
+      {/* Utility AI Evaluation Dashboard (10 Candidate Actions) */}
+      <div className="p-4 rounded-xl bg-slate-950/90 border border-indigo-950 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-indigo-400" />
+            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+              Utility AI 候选行为效用评估看板 (10 候选动作全排序)
+            </h4>
+          </div>
+          <button
+            onClick={() => setShowFormulaDetails(!showFormulaDetails)}
+            className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition"
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span>{showFormulaDetails ? '收起打分公式' : '查看多因子打分公式'}</span>
+            {showFormulaDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        </div>
+
+        {/* Formula Explainer Banner */}
+        {showFormulaDetails && (
+          <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-900/50 space-y-1.5 text-xs text-slate-300 font-mono">
+            <div className="text-indigo-400 font-bold flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5" />
+              <span>ActionScore 计算公式：</span>
+            </div>
+            <div className="text-[11px] leading-relaxed text-slate-200">
+              Score = NeedScore(需求基础分 0-100) × PersonalityModifier(MBTI/BigFive 0.5-1.8) × GoalModifier(高层目标契合 0.8-1.6) × RelationshipModifier(人际好感 0.8-1.5) × EnvironmentModifier(场域与天气 0.7-1.4) × MemoryModifier(记忆情感印记 0.85-1.35) × Randomness(扰动 0.95-1.05)
+            </div>
+            <div className="text-[10px] text-slate-400">
+              * 数值严格约束在 [0, 100] 区间，保证决策高度可解释、稳定且拒绝呆板机械。
+            </div>
+          </div>
+        )}
+
+        {/* 10 Candidate Actions Cards Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          {utilityScores.map((item, idx) => {
+            const isTop = idx === 0;
+            const isSelected = inspectingAction.action === item.action;
+            const barWidth = `${item.score}%`;
+
+            return (
+              <div
+                key={item.action}
+                onClick={() => setSelectedUtilityAction(item.action)}
+                className={`p-2.5 rounded-xl border cursor-pointer transition space-y-1.5 relative ${
+                  isSelected
+                    ? 'bg-indigo-950/60 border-indigo-500 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-400/40'
+                    : isTop
+                    ? 'bg-slate-900 border-indigo-900/80 hover:border-indigo-700'
+                    : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700'
+                }`}
+              >
+                {isTop && (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-[9px] shadow">
+                    Top 1
+                  </span>
+                )}
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1 font-medium text-slate-200">
+                    <span>{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  <span className={`font-mono font-bold ${isTop ? 'text-amber-400' : 'text-slate-300'}`}>
+                    {item.score}
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      isTop
+                        ? 'bg-gradient-to-r from-amber-400 to-orange-400'
+                        : item.score > 60
+                        ? 'bg-indigo-400'
+                        : item.score > 30
+                        ? 'bg-blue-500'
+                        : 'bg-slate-600'
+                    }`}
+                    style={{ width: barWidth }}
+                  />
+                </div>
+
+                <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between pt-0.5">
+                  <span>需: {item.factors.needScore}</span>
+                  <span>特: ×{item.factors.personalityModifier}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Selected Utility Action Inspector Box */}
+        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-900/60 text-xs space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-indigo-300 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <span>{inspectingAction.icon}</span>
+              <span>【{inspectingAction.label} ({inspectingAction.action})】决策因子透视</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+                最终评分: {inspectingAction.score} / 100
+              </span>
+            </span>
+            <span className="text-[11px] font-mono text-slate-400">
+              {inspectingAction.action === topUtility.action ? '★ 系统已采纳为此刻执行行为' : '次选候选行为'}
+            </span>
+          </div>
+
+          <div className="text-slate-300 text-[11px] leading-relaxed">
+            {inspectingAction.reason}
+          </div>
+
+          {/* Factor Breakdown Chips */}
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1 border-t border-slate-800 font-mono text-[10px]">
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">需求基础分</span>
+              <span className="text-amber-400 font-bold">{inspectingAction.factors.needScore}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">性格特质修正</span>
+              <span className="text-purple-400 font-bold">×{inspectingAction.factors.personalityModifier}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">当前目标加权</span>
+              <span className="text-blue-400 font-bold">×{inspectingAction.factors.goalModifier}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">人际好感加权</span>
+              <span className="text-rose-400 font-bold">×{inspectingAction.factors.relationshipModifier}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">场域天气修正</span>
+              <span className="text-emerald-400 font-bold">×{inspectingAction.factors.environmentModifier}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-950 border border-slate-800/80">
+              <span className="text-slate-500 block">记忆印记修正</span>
+              <span className="text-cyan-400 font-bold">×{inspectingAction.factors.memoryModifier}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -201,21 +364,21 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
           </div>
         </div>
 
-        {/* Stage 2: Goal */}
+        {/* Stage 2: Utility AI & Goal */}
         <div className="p-3.5 rounded-xl bg-slate-950/80 border border-blue-900/40 space-y-2 relative">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-blue-400 flex items-center gap-1.5">
-              <span>2. Goal 目标生成</span>
+              <span>2. Utility AI 评估 ➔ Goal</span>
             </span>
             <span className="text-[10px] font-mono text-blue-300">
-              紧急度 {currentGoal?.urgency || 5}/10
+              {topUtility?.score} 分
             </span>
           </div>
           <p className="text-[11px] text-slate-300 leading-relaxed font-medium line-clamp-2">
             {currentGoal?.title || '在小镇维持日常生活并寻找社交伙伴'}
           </p>
           <div className="text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-900">
-            状态: <span className="text-blue-400">正在追求 (Active)</span>
+            首选决策: <span className="text-blue-400 font-bold">{topUtility?.icon} {topUtility?.label}</span>
           </div>
         </div>
 
@@ -272,7 +435,7 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
               <span>📍 为什么在【{currentBuilding?.name || '当前地点'}】？</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
-              因为当前正按计划执行动作「{currentAction?.description}」，需在{targetBuilding?.name || currentBuilding?.name || '指定场所'}操作设施或驻留。
+              因为当前 Utility AI 决策最高分为「{topUtility?.label}」({topUtility?.score}分)，需在{targetBuilding?.name || currentBuilding?.name || '指定场所'}操作设施或驻留。
             </p>
           </div>
 
@@ -283,7 +446,7 @@ export const AgentDecisionPipeline: React.FC<AgentDecisionPipelineProps> = ({
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
               {targetAgent 
-                ? `根据好感度矩阵与过往印象，与${targetAgent.name}交流能最大程度满足社交认同(${needs.social}%)并缓解心理压力。`
+                ? `根据好感度矩阵与过往印象，与${targetAgent.name}交流的人际修正系数为 ×${topUtility?.factors.relationshipModifier}，能最大程度满足社交认同并缓解压力。`
                 : currentGoal?.targetAgentName
                 ? `目标涉及${currentGoal.targetAgentName}的工位或资源协调（好感加成）。`
                 : '当前行动专注于独立工位生产或自我休整，不依赖特定交互对象。'}

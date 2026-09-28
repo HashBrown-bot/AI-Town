@@ -481,7 +481,8 @@ export default function App() {
           simDay,
           timeStr,
           weather,
-          isInteracting
+          isInteracting,
+          events
         );
       });
 
@@ -512,7 +513,7 @@ export default function App() {
 
       return updated;
     });
-  }, [buildings, simHour, simMinute, simDay, weather]);
+  }, [buildings, simHour, simMinute, simDay, weather, events]);
 
   // 3. Trigger Autonomous Dialogue between two agents
   const triggerAutonomousDialogue = async (agentA: Agent, agentB: Agent) => {
@@ -990,6 +991,7 @@ export default function App() {
             onSelectAgent={setSelectedAgentId}
             simDay={simDay}
             simTime={`${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`}
+            weather={weather}
             onTriggerReflection={handleTriggerAgentReflection}
             isReflecting={isReflectingAgentId === (selectedAgentId || agents[0]?.id)}
           />

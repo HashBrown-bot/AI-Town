@@ -33,6 +33,7 @@ interface AgentEvolutionViewProps {
   onSelectAgent: (id: string) => void;
   simDay?: number;
   simTime?: string;
+  weather?: string;
   onTriggerReflection?: (agentId: string) => Promise<void>;
   isReflecting?: boolean;
 }
@@ -44,6 +45,7 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
   onSelectAgent,
   simDay = 1,
   simTime = '09:00',
+  weather,
   onTriggerReflection,
   isReflecting = false
 }) => {
@@ -433,6 +435,7 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
         agent={currentAgent}
         buildings={buildings}
         otherAgents={agents}
+        weather={weather}
       />
 
       {/* Memory Retrieval Simulator & Inspector Panel */}

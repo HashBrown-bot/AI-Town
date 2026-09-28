@@ -1,11 +1,11 @@
-import { Agent, AgentAction, AgentGoal, AgentPlan, AgentNeeds, Building } from '../types/town';
+import { Agent, AgentAction, AgentGoal, AgentPlan, AgentNeeds, Building, TownEvent, UtilityActionScore } from '../types/town';
 import { clampNeed, updateAgentNeeds } from './NeedsSystem';
 import { evaluateAgentGoal } from './GoalSystem';
 import { planGoalActions } from './PlannerSystem';
 
 /**
  * Ticks an individual agent's decision-action cycle:
- * Needs -> Goal -> Plan -> Action -> World Feedback
+ * Needs -> Utility AI Evaluation -> Goal -> Plan -> Action -> World Feedback
  */
 export function tickAgentAutonomousBehavior(
   agent: Agent,
@@ -15,7 +15,8 @@ export function tickAgentAutonomousBehavior(
   simDay: number,
   simTime: string,
   weather?: string,
-  isInteracting: boolean = false
+  isInteracting: boolean = false,
+  events: TownEvent[] = []
 ): Agent {
   // If agent is actively engaged in a modal dialogue bubble, pause autonomous movement
   if (isInteracting) {
@@ -28,13 +29,25 @@ export function tickAgentAutonomousBehavior(
   // 2. Needs evolution with simulation time & personality
   let updatedNeeds = updateAgentNeeds(agent, deltaMinutes, currentBuilding, weather);
 
-  // 3. Goal & Plan Lifecycle Check
+  // 3. Goal & Plan Lifecycle Check via Utility AI
   let currentGoal = agent.goal;
   let currentPlan = agent.plan;
+  let utilityEvaluations = agent.utilityEvaluations;
 
-  // If no goal or previous goal completed, formulate a new goal and plan
+  // If no goal or previous goal completed, formulate a new goal and plan with Utility AI
   if (!currentGoal || currentGoal.status === 'completed' || !currentPlan || currentPlan.isCompleted) {
-    currentGoal = evaluateAgentGoal({ ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
+    const evalResult = evaluateAgentGoal(
+      { ...agent, needs: updatedNeeds },
+      buildings,
+      otherAgents,
+      simDay,
+      simTime,
+      currentBuilding,
+      weather,
+      events
+    );
+    currentGoal = evalResult.goal;
+    utilityEvaluations = evalResult.evaluations;
     currentPlan = planGoalActions(currentGoal, { ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
   }
 
@@ -42,8 +55,19 @@ export function tickAgentAutonomousBehavior(
   if (currentPlan.currentStepIndex >= currentPlan.steps.length) {
     currentPlan.isCompleted = true;
     currentGoal.status = 'completed';
-    // Re-evaluate immediately
-    currentGoal = evaluateAgentGoal({ ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
+    // Re-evaluate immediately with Utility AI
+    const evalResult = evaluateAgentGoal(
+      { ...agent, needs: updatedNeeds },
+      buildings,
+      otherAgents,
+      simDay,
+      simTime,
+      currentBuilding,
+      weather,
+      events
+    );
+    currentGoal = evalResult.goal;
+    utilityEvaluations = evalResult.evaluations;
     currentPlan = planGoalActions(currentGoal, { ...agent, needs: updatedNeeds }, buildings, otherAgents, simDay, simTime);
   }
 
@@ -181,6 +205,7 @@ export function tickAgentAutonomousBehavior(
     goal: currentGoal,
     plan: currentPlan,
     currentAction,
+    utilityEvaluations,
     currentGoal: currentGoal.title, // text overview compatibility
     currentActivity,
     currentThought,

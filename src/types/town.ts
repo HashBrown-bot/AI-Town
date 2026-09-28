@@ -66,6 +66,41 @@ export type ActionType =
   | 'seek_medical_aid'     // 诊所问诊与精油疗愈
   | 'civic_patrol';        // 市政巡视与簿记核验
 
+export type UtilityActionType = 
+  | 'sleep'
+  | 'eat'
+  | 'work'
+  | 'socialize'
+  | 'explore'
+  | 'relax'
+  | 'study'
+  | 'shop'
+  | 'seekHelp'
+  | 'attendEvent';
+
+export interface UtilityScoreFactors {
+  needScore: number;            // 需求迫切度基础分 (0 - 100)
+  personalityModifier: number;  // MBTI / Big Five 特质修正系数 (0.5 - 2.0)
+  goalModifier: number;         // 与高层当前目标契合度加权 (0.8 - 1.6)
+  relationshipModifier: number; // 社交好感与信任印象修正 (0.8 - 1.5)
+  environmentModifier: number;  // 当前地点与天气场域适宜度 (0.7 - 1.4)
+  memoryModifier: number;       // 近期反思与情境记忆情感印记 (0.8 - 1.4)
+  randomness: number;           // 微量噪声抖动避免机械重复 (0.95 - 1.05)
+}
+
+export interface UtilityActionScore {
+  action: UtilityActionType;
+  label: string;
+  icon: string;
+  score: number;                // 综合效用评分 (0 - 100)
+  rawScore: number;
+  factors: UtilityScoreFactors;
+  reason: string;               // 可解释性原因阐述
+  targetBuildingId?: string;
+  targetAgentId?: string;
+  targetAgentName?: string;
+}
+
 export interface AgentAction {
   id: string;
   type: ActionType;
@@ -141,6 +176,7 @@ export interface Agent {
   goal?: AgentGoal;  // 当前正在追求的自主目标
   plan?: AgentPlan;  // 目标拆解的多步行动计划
   currentAction?: AgentAction; // 正在执行的具体原子行动
+  utilityEvaluations?: UtilityActionScore[]; // 候选 Utility 行为评分列表 (用于解释性透视)
   currentActivity: string;
   currentThought: string;
   currentGoal?: string; // 居民当前追求的核心目标/意向 (文本概述兼容)
