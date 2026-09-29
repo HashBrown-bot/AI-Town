@@ -36,6 +36,58 @@ interface DashboardOverviewProps {
   onOpenFineTuningExport: () => void;
 }
 
+const TAILWIND_COLOR_MAP: Record<string, string> = {
+  emerald: '#10b981',
+  teal: '#14b8a6',
+  cyan: '#06b6d4',
+  sky: '#0284c7',
+  blue: '#3b82f6',
+  indigo: '#6366f1',
+  violet: '#8b5cf6',
+  purple: '#a855f7',
+  fuchsia: '#d946ef',
+  pink: '#ec4899',
+  rose: '#f43f5e',
+  red: '#ef4444',
+  orange: '#f97316',
+  amber: '#f59e0b',
+  yellow: '#eab308',
+  lime: '#84cc16',
+  green: '#22c55e',
+  slate: '#64748b',
+  gray: '#6b7280',
+  zinc: '#71717a',
+};
+
+function resolveColorToRgba(colorStr: string, alpha = 1): string {
+  if (!colorStr) return `rgba(255, 184, 107, ${alpha})`;
+  const trimmed = colorStr.trim().toLowerCase();
+  const baseName = trimmed.split('-')[0];
+  const mappedHex = TAILWIND_COLOR_MAP[baseName];
+  const hex = mappedHex || (trimmed.startsWith('#') ? trimmed : null);
+
+  if (hex) {
+    let cleanHex = hex.replace('#', '');
+    if (cleanHex.length === 3) {
+      cleanHex = cleanHex.split('').map(c => c + c).join('');
+    }
+    if (cleanHex.length >= 6) {
+      const r = parseInt(cleanHex.slice(0, 2), 16);
+      const g = parseInt(cleanHex.slice(2, 4), 16);
+      const b = parseInt(cleanHex.slice(4, 6), 16);
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+    }
+  }
+
+  if (trimmed.startsWith('rgb')) {
+    return trimmed;
+  }
+
+  return `rgba(255, 184, 107, ${alpha})`;
+}
+
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   agents,
   buildings,
@@ -187,12 +239,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       // 4. Draw Resident Nodes as Glowing Celestial Orbs
       Object.entries(nodePositions).forEach(([id, { x, y, agent }]) => {
         const isHovered = hoveredNode === id;
-        const nodeColor = agent.spriteColor || '#ffb86b';
+        const rawColor = agent.spriteColor || '#ffb86b';
+        const auraColor = resolveColorToRgba(rawColor, 0.4);
+        const strokeColor = isHovered ? '#ffc97a' : resolveColorToRgba(rawColor, 1);
 
         // Outer Aura
         const auraGrad = ctx.createRadialGradient(x, y, 4, x, y, isHovered ? 26 : 18);
-        auraGrad.addColorStop(0, `${nodeColor}66`);
-        auraGrad.addColorStop(1, 'transparent');
+        auraGrad.addColorStop(0, auraColor);
+        auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = auraGrad;
         ctx.beginPath();
         ctx.arc(x, y, isHovered ? 26 : 18, 0, Math.PI * 2);
@@ -204,7 +258,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         ctx.arc(x, y, isHovered ? 17 : 14, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = isHovered ? '#ffc97a' : nodeColor;
+        ctx.strokeStyle = strokeColor;
         ctx.lineWidth = isHovered ? 2.5 : 1.8;
         ctx.stroke();
 
