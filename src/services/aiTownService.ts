@@ -1,4 +1,5 @@
 import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult } from '../types/town';
+import { logger } from '../utils/logger';
 
 export async function requestAgentDialogue(
   agentA: Agent,
@@ -44,7 +45,7 @@ export async function requestAgentDialogue(
 
     return await res.json();
   } catch (err) {
-    console.warn('Dialogue generation fallback triggered:', err);
+    logger.warn('AI', 'Dialogue generation fallback triggered:', err);
     // Client-side fallback if server request fails
     return {
       topic: `${location.name}的即兴交谈`,
@@ -111,7 +112,7 @@ export async function requestAgentReflection(
 
     return await res.json();
   } catch (err) {
-    console.warn('Agent reflection fallback triggered:', err);
+    logger.warn('AI', 'Agent reflection fallback triggered:', err);
     return {
       reflection: `近来在小镇的生活和交流，让我深感邻里之间的关照与真诚最为可贵。我希望能为社区做更多有价值的事。`,
       type: 'reflection',
@@ -162,7 +163,7 @@ export async function requestTownAnalysis(
       timestamp: Date.now()
     };
   } catch (err) {
-    console.warn('Town analysis fallback triggered:', err);
+    logger.warn('AI', 'Town analysis fallback triggered:', err);
     return {
       id: `analysis-${Date.now()}`,
       title: '小镇社会动态与冲突演化态势分析',
@@ -215,7 +216,7 @@ export async function requestEventImpact(
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn('Event impact fallback:', err);
+    logger.warn('AI', 'Event impact fallback:', err);
     return {
       impactSummary: `事件“${event.title}”在小镇传播开来，引起了大家的热烈讨论。`,
       agentReactions: agents.map(a => ({
@@ -238,7 +239,7 @@ export async function generateNewAgentPersona(hint: string): Promise<Partial<Age
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn('Agent generation fallback:', err);
+    logger.warn('AI', 'Agent generation fallback:', err);
     return {
       name: '沐子衿',
       role: '古法木器雕刻师',

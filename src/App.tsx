@@ -124,7 +124,7 @@ function loadStoredAgents(): Agent[] {
       }
     }
   } catch (err) {
-    console.warn('Failed to load local agents:', err);
+    logger.warn('Storage', 'Failed to load local agents:', err);
   }
   return INITIAL_AGENTS;
 }
@@ -139,7 +139,7 @@ function loadStoredEconomy(): TownEconomyState {
       }
     }
   } catch (err) {
-    console.warn('Failed to load local economy:', err);
+    logger.warn('Storage', 'Failed to load local economy:', err);
   }
   return initializeTownEconomy();
 }
@@ -152,7 +152,7 @@ function loadStoredInteractions(): InteractionRecord[] | null {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (err) {
-    console.warn('Failed to load local interactions:', err);
+    logger.warn('Storage', 'Failed to load local interactions:', err);
   }
   return null;
 }
@@ -165,22 +165,24 @@ function loadStoredKnowledge(): AgentKnowledge[] {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (err) {
-    console.warn('Failed to load local knowledge:', err);
+    logger.warn('Storage', 'Failed to load local knowledge:', err);
   }
   return INITIAL_TOWN_KNOWLEDGE;
 }
 
 export default function App() {
+  logger.recordMetric('renders', 1);
+
   // Navigation
   const [currentTab, setCurrentTab] = useState<TabKey>('canvas');
 
-  // Simulation State with persistent local initial state
-  const initialSim = loadStoredSimState();
-  const [simDay, setSimDay] = useState<number>(initialSim.simDay);
-  const [simHour, setSimHour] = useState<number>(initialSim.simHour);
-  const [simMinute, setSimMinute] = useState<number>(initialSim.simMinute);
+  // Simulation State with lazy persistent local initial state (evaluated only on mount)
+  const [initialSim] = useState(loadStoredSimState);
+  const [simDay, setSimDay] = useState<number>(() => initialSim.simDay);
+  const [simHour, setSimHour] = useState<number>(() => initialSim.simHour);
+  const [simMinute, setSimMinute] = useState<number>(() => initialSim.simMinute);
   const [simSpeed, setSimSpeed] = useState<number>(1); // 0=pause, 1=1x, 2=2x, 5=5x
-  const [weather, setWeather] = useState<'clear' | 'golden_sunset' | 'rainy' | 'starry_night' | 'misty_morning'>(initialSim.weather as any);
+  const [weather, setWeather] = useState<'clear' | 'golden_sunset' | 'rainy' | 'starry_night' | 'misty_morning'>(() => initialSim.weather as any);
 
   // Core Data Collections
   const [agents, setAgents] = useState<Agent[]>(loadStoredAgents);
@@ -283,94 +285,60 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [simDay, simHour, simMinute, weather, knowledgeItems]);
 
+  // Idempotency refs for StrictMode initialization
+  const isBootingRef = useRef<boolean>(false);
+  const bootCompletedRef = useRef<boolean>(false);
+
   // 2. Initial Firebase boot, cloud hydration and connection test
   useEffect(() => {
+    if (isBootingRef.current || bootCompletedRef.current) return;
+    isBootingRef.current = true;
+
     async function bootFirebase() {
-      console.group('[Aetheria 调试日志] 2. bootFirebase: 启动云端同步与状态水合');
-      console.log('正在检测 Firebase Firestore 连接...');
+      logger.info('Firebase', 'Booting Firebase sync and cloud state hydration...');
       const connected = await testConnection();
       setIsCloudReady(connected);
-      console.log('Firebase 连接测试结果:', connected ? '✅ 已连接 (Online)' : '❌ 无法连接 (Offline)');
 
       if (connected) {
-        console.log('Firebase Firestore connection verified.');
-
         // 1. Fetch persistent simulation state from Cloud
         try {
-          console.group('[Aetheria 调试日志] 2.1 检查 simulation_state (小镇时钟与天数)');
-          console.log('正在调用 fetchSimulationStateFromCloud()...');
           const cloudSim = await fetchSimulationStateFromCloud();
-          console.log('Firestore 返回的 cloudSim 数据:', cloudSim);
-          console.log('此时 App 组件内存中的本地时钟状态:', {
-            simDay,
-            simHour,
-            simMinute,
-            weather
-          });
-
           if (cloudSim && typeof cloudSim.simDay === 'number') {
-            console.log('云端存在 simulation_state 记录: simDay =', cloudSim.simDay, ', simHour =', cloudSim.simHour, ', updatedAt =', cloudSim.updatedAt);
-            
-            // Compare local simulation progress vs cloud simulation progress
             const localTotalSimMinutes = simDay * 24 * 60 + simHour * 60 + simMinute;
             const cloudTotalSimMinutes = cloudSim.simDay * 24 * 60 + cloudSim.simHour * 60 + cloudSim.simMinute;
 
-            console.log('时钟进度对比 (换算为累计分钟): 本地 =', localTotalSimMinutes, 'vs 云端 =', cloudTotalSimMinutes);
-
             if (cloudTotalSimMinutes > localTotalSimMinutes) {
-              console.warn('⚠️ 【触发状态覆盖】检测到云端进度领先于本地，正在从云端覆盖本地状态:', {
-                原本地: { simDay, simHour, simMinute },
-                覆盖为云端: { simDay: cloudSim.simDay, simHour: cloudSim.simHour, simMinute: cloudSim.simMinute }
-              });
+              logger.info('Firebase', 'Hydrating local clock with cloud progress', cloudSim);
               setSimDay(cloudSim.simDay);
               setSimHour(cloudSim.simHour);
               setSimMinute(cloudSim.simMinute);
               if (cloudSim.weather) setWeather(cloudSim.weather as any);
             } else if (localTotalSimMinutes > cloudTotalSimMinutes) {
-              console.log('ℹ️ 【保留本地状态】本地进度领先于云端 (本地更新)，将本地时钟同步覆盖至云端...');
               syncSimulationStateToCloud({ simDay, simHour, simMinute, weather });
-            } else {
-              console.log('✅ 【状态一致】本地进度与云端进度完全一致 (simDay:', simDay, ')，无需覆盖变更。');
             }
           } else {
-            console.log('ℹ️ 云端暂无 simulation_state 记录，以当前本地状态作为初值上传云端:', {
-              simDay,
-              simHour,
-              simMinute,
-              weather
-            });
             syncSimulationStateToCloud({ simDay, simHour, simMinute, weather });
           }
-          console.groupEnd();
         } catch (e) {
-          console.error('❌ 获取或同步云端 simulation_state 异常:', e);
-          console.groupEnd();
+          logger.warn('Firebase', 'Failed to fetch/sync simulation state:', e);
         }
 
         // 2. Fetch persistent interactions from Cloud
         try {
-          console.group('[Aetheria 调试日志] 2.2 恢复交互记录 (interactions)');
-          console.log('正在从 Firestore 拉取 interactions...');
           const cloudInteractions = await fetchCloudInteractions();
-          console.log('从 Firestore 获取到的交互记录数量:', cloudInteractions?.length || 0);
           if (cloudInteractions && cloudInteractions.length > 0) {
             setInteractions(cloudInteractions);
             setCloudSyncCount(cloudInteractions.length);
           } else if (interactions.length === 0) {
-            console.log('本地与云端均无交互记录，生成初始演示记录...');
             generateInitialHistoricalInteractions();
           }
-          console.groupEnd();
         } catch (e) {
-          console.warn('Could not fetch cloud interactions:', e);
-          console.groupEnd();
+          logger.warn('Firebase', 'Could not fetch cloud interactions:', e);
         }
 
         // 3. Fetch persistent agents from Cloud
         try {
-          console.group('[Aetheria 调试日志] 2.3 恢复居民状态 (agents)');
           const cloudAgents = await fetchCloudAgents();
-          console.log('从 Firestore 获取到的居民状态数量:', cloudAgents?.length || 0);
           if (cloudAgents && cloudAgents.length > 0) {
             setAgents(prev => {
               return prev.map(a => {
@@ -393,10 +361,8 @@ export default function App() {
               });
             });
           }
-          console.groupEnd();
         } catch (e) {
-          console.warn('Could not fetch cloud agents:', e);
-          console.groupEnd();
+          logger.warn('Firebase', 'Could not fetch cloud agents:', e);
         }
 
         // 4. Fetch persistent events from Cloud
@@ -408,7 +374,7 @@ export default function App() {
             INITIAL_EVENTS.forEach(e => syncEventToCloud(e));
           }
         } catch (e) {
-          console.warn('Could not fetch cloud events:', e);
+          logger.warn('Firebase', 'Could not fetch cloud events:', e);
         }
 
         // 5. Fetch persistent analysis from Cloud
@@ -420,7 +386,7 @@ export default function App() {
             syncAnalysisToCloud(INITIAL_ANALYSIS);
           }
         } catch (e) {
-          console.warn('Could not fetch cloud analysis:', e);
+          logger.warn('Firebase', 'Could not fetch cloud analysis:', e);
         }
 
         // 6. Fetch persistent economy state from Cloud
@@ -432,7 +398,7 @@ export default function App() {
             syncEconomyStateToCloud(initializeTownEconomy());
           }
         } catch (e) {
-          console.warn('Could not fetch cloud economy state:', e);
+          logger.warn('Firebase', 'Could not fetch cloud economy state:', e);
         }
       } else {
         // If offline and no interactions, seed initial
@@ -440,7 +406,8 @@ export default function App() {
           generateInitialHistoricalInteractions();
         }
       }
-      console.groupEnd();
+      bootCompletedRef.current = true;
+      isBootingRef.current = false;
     }
 
     bootFirebase();
@@ -520,6 +487,7 @@ export default function App() {
 
     const intervalTime = 1000 / simSpeed;
     const timer = setInterval(() => {
+      logger.recordMetric('simulationTicks', 1);
       // Advance clock
       setSimMinute(prevMin => {
         let nextMin = prevMin + 5;
@@ -773,14 +741,14 @@ export default function App() {
             deltaAffinity: dialogueResult.affinityDeltaAtoB, 
             stage: relOutcome.updatedRelAtoB.relationshipStage,
             dynamic: relOutcome.updatedRelAtoB.dominantDynamic,
-            stageTransition: relOutcome.stageTransitionAtoB,
+            ...(relOutcome.stageTransitionAtoB ? { stageTransition: relOutcome.stageTransitionAtoB } : {}),
             note: dialogueResult.memoryA 
           },
           [agentB.id]: { 
             deltaAffinity: dialogueResult.affinityDeltaBtoA, 
             stage: relOutcome.updatedRelBtoA.relationshipStage,
             dynamic: relOutcome.updatedRelBtoA.dominantDynamic,
-            stageTransition: relOutcome.stageTransitionBtoA,
+            ...(relOutcome.stageTransitionBtoA ? { stageTransition: relOutcome.stageTransitionBtoA } : {}),
             note: dialogueResult.memoryB 
           }
         },

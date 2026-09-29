@@ -13,7 +13,8 @@ service cloud.firestore {
 
     // Simulation State Collection (Global town clock, day, weather)
     match /simulation_state/{stateId} {
-      allow read: if isValidId(stateId);
+      allow get: if isValidId(stateId);
+      allow list: if true;
       allow create, update: if isValidId(stateId)
         && request.resource.data.id is string
         && request.resource.data.simDay is number
@@ -24,7 +25,8 @@ service cloud.firestore {
 
     // Interactions Collection (Simulated town encounters and dialogues)
     match /interactions/{interactionId} {
-      allow read: if isValidId(interactionId);
+      allow get: if isValidId(interactionId);
+      allow list: if true;
       allow create, update: if isValidId(interactionId) 
         && request.resource.data.id is string
         && request.resource.data.participants is list
@@ -36,7 +38,8 @@ service cloud.firestore {
 
     // Agents Collection (Resident status & profile)
     match /agents/{agentId} {
-      allow read: if isValidId(agentId);
+      allow get: if isValidId(agentId);
+      allow list: if true;
       allow create, update: if isValidId(agentId)
         && request.resource.data.id is string
         && request.resource.data.name is string
@@ -46,7 +49,8 @@ service cloud.firestore {
 
     // Town Events Collection (Events and user interventions)
     match /town_events/{eventId} {
-      allow read: if isValidId(eventId);
+      allow get: if isValidId(eventId);
+      allow list: if true;
       allow create, update: if isValidId(eventId)
         && request.resource.data.id is string
         && request.resource.data.title is string
@@ -56,7 +60,8 @@ service cloud.firestore {
 
     // AI Town Analyses Collection
     match /analyses/{analysisId} {
-      allow read: if isValidId(analysisId);
+      allow get: if isValidId(analysisId);
+      allow list: if true;
       allow create, update: if isValidId(analysisId)
         && request.resource.data.id is string
         && request.resource.data.title is string
@@ -66,7 +71,8 @@ service cloud.firestore {
 
     // Town Knowledge & Rumor Network Collection
     match /town_knowledge/{knowledgeId} {
-      allow read: if isValidId(knowledgeId);
+      allow get: if isValidId(knowledgeId);
+      allow list: if true;
       allow create, update: if isValidId(knowledgeId)
         && request.resource.data.id is string
         && request.resource.data.subject is string
@@ -76,7 +82,8 @@ service cloud.firestore {
 
     // Town Economy System Collection
     match /town_economy/{economyId} {
-      allow read: if isValidId(economyId);
+      allow get: if isValidId(economyId);
+      allow list: if true;
       allow create, update: if isValidId(economyId)
         && request.resource.data.id is string
         && request.resource.data.totalMoneySupply is number;

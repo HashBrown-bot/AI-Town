@@ -64,7 +64,11 @@ export const logger = {
     const key = `${tag}::${errorMsg}`;
     const now = Date.now();
 
-    devMetrics.firebaseErrors++;
+    if (tag === 'Firebase' || tag === 'Firestore') {
+      devMetrics.firebaseErrors++;
+    } else {
+      devMetrics.apiErrors++;
+    }
 
     const existing = errorThrottles.get(key);
     if (!existing) {

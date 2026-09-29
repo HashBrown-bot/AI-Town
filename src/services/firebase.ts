@@ -43,6 +43,32 @@ export interface FirestoreErrorInfo {
   };
 }
 
+/**
+ * Recursively cleans data for Firestore by stripping `undefined` fields,
+ * filtering `undefined` elements from arrays, and ensuring nested objects
+ * are safe for setDoc / updateDoc.
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === undefined) {
+    return null as any;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => cleanForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data as Record<string, any>)) {
+    if (value !== undefined) {
+      result[key] = cleanForFirestore(value);
+    }
+  }
+  return result as T;
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -61,10 +87,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Connection test helper using simulation_state/current (allowed by firestore.rules)
 export async function testConnection(): Promise<boolean> {
   try {
-    // simulation_state/{stateId} has explicit allow read rule.
+    // simulation_state/{stateId} has explicit allow get rule.
     // getDocFromServer verifies network connectivity, valid authentication, and rule permissions.
-    await getDocFromServer(doc(db, 'simulation_state', 'current'));
-    logger.info('Firebase', 'Connected successfully to Firestore (simulation_state accessible)');
+    const snapshot = await getDocFromServer(doc(db, 'simulation_state', 'current'));
+    if (snapshot.exists()) {
+      logger.info('Firebase', 'Connected successfully to Firestore (simulation_state/current found)');
+    } else {
+      logger.info('Firebase', 'Connected successfully to Firestore (simulation_state accessible, document not yet created)');
+    }
     recordFirestoreRead(1);
     return true;
   } catch (error: any) {
@@ -73,8 +103,11 @@ export async function testConnection(): Promise<boolean> {
 
     if (code === 'permission-denied' || message.includes('permission') || message.includes('Permission')) {
       logger.error('Firebase', new Error(`Permission Denied on testConnection: ${message}`));
-    } else if (code === 'unavailable' || message.includes('offline') || message.includes('Failed to fetch')) {
-      logger.warn('Firebase', `Network/Offline Warning: ${message}`);
+    } else if (code === 'unavailable' || message.includes('offline') || message.includes('Failed to fetch') || message.includes('client is offline')) {
+      logger.warn('Firebase', `Network/Offline: Firestore is currently unreachable (${message})`);
+    } else if (code === 'not-found') {
+      logger.info('Firebase', 'Firestore reachable (document not found, ready for creation)');
+      return true;
     } else {
       logger.error('Firebase', new Error(`Firestore Connection Error: ${message}`));
     }
@@ -86,7 +119,7 @@ export async function testConnection(): Promise<boolean> {
 export async function syncInteractionToCloud(interaction: InteractionRecord): Promise<boolean> {
   const path = `interactions/${interaction.id}`;
   try {
-    await setDoc(doc(db, 'interactions', interaction.id), {
+    const payload = cleanForFirestore({
       id: interaction.id,
       participants: interaction.participants,
       participantNames: interaction.participantNames,
@@ -100,6 +133,7 @@ export async function syncInteractionToCloud(interaction: InteractionRecord): Pr
       simDay: interaction.simDay,
       simTime: interaction.simTime
     });
+    await setDoc(doc(db, 'interactions', interaction.id), payload);
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -112,14 +146,14 @@ export async function syncInteractionToCloud(interaction: InteractionRecord): Pr
 export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
   const path = `agents/${agent.id}`;
   try {
-    await setDoc(doc(db, 'agents', agent.id), {
+    const payload = cleanForFirestore({
       id: agent.id,
       name: agent.name,
       role: agent.role,
       mbti: agent.mbti,
-      energy: agent.state.energy,
-      mood: agent.state.mood,
-      stress: agent.state.stress,
+      energy: agent.state?.energy ?? 80,
+      mood: agent.state?.mood ?? 50,
+      stress: agent.state?.stress ?? 20,
       physicalNeeds: agent.physicalNeeds || null,
       psychologicalNeeds: agent.psychologicalNeeds || null,
       socialNeeds: agent.socialNeeds || null,
@@ -127,18 +161,19 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
       activeConditionTags: agent.activeConditionTags || [],
       relationships: agent.relationships || null,
       affinity: agent.affinity || null,
-      currentActivity: agent.currentActivity,
+      currentActivity: agent.currentActivity || '日常活动',
       currentGoal: agent.goal?.title || agent.currentGoal || '',
       currentAction: agent.currentAction?.description || '',
-      location: agent.currentBuildingId,
+      location: agent.currentBuildingId || '星光像素咖啡馆',
       money: typeof agent.money === 'number' ? agent.money : 100,
       income: typeof agent.income === 'number' ? agent.income : 0,
       expenses: typeof agent.expenses === 'number' ? agent.expenses : 0,
-      occupation: agent.occupation || agent.role,
+      occupation: agent.occupation || agent.role || '居民',
       salary: typeof agent.salary === 'number' ? agent.salary : 30,
       economicStatus: agent.economicStatus || 'comfortable',
       updatedAt: Date.now()
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'agents', agent.id), payload, { merge: true });
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -151,7 +186,7 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
 export async function syncEventToCloud(event: TownEvent): Promise<boolean> {
   const path = `town_events/${event.id}`;
   try {
-    await setDoc(doc(db, 'town_events', event.id), {
+    const payload = cleanForFirestore({
       id: event.id,
       title: event.title,
       description: event.description,
@@ -160,6 +195,7 @@ export async function syncEventToCloud(event: TownEvent): Promise<boolean> {
       targetBuilding: event.targetBuilding || 'all',
       timestamp: event.timestamp
     });
+    await setDoc(doc(db, 'town_events', event.id), payload);
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -172,7 +208,7 @@ export async function syncEventToCloud(event: TownEvent): Promise<boolean> {
 export async function syncAnalysisToCloud(analysis: TownAnalysis): Promise<boolean> {
   const path = `analyses/${analysis.id}`;
   try {
-    await setDoc(doc(db, 'analyses', analysis.id), {
+    const payload = cleanForFirestore({
       id: analysis.id,
       title: analysis.title,
       summary: analysis.summary,
@@ -183,6 +219,7 @@ export async function syncAnalysisToCloud(analysis: TownAnalysis): Promise<boole
       recommendations: analysis.recommendations,
       timestamp: analysis.timestamp
     });
+    await setDoc(doc(db, 'analyses', analysis.id), payload);
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -200,14 +237,15 @@ export async function syncSimulationStateToCloud(state: {
 }): Promise<boolean> {
   const path = 'simulation_state/current';
   try {
-    await setDoc(doc(db, 'simulation_state', 'current'), {
+    const payload = cleanForFirestore({
       id: 'current',
       simDay: state.simDay,
       simHour: state.simHour,
       simMinute: state.simMinute,
       weather: state.weather,
       updatedAt: Date.now()
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'simulation_state', 'current'), payload, { merge: true });
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -309,10 +347,11 @@ export async function fetchCloudAnalysis(): Promise<TownAnalysis | null> {
 export async function syncKnowledgeToCloud(item: AgentKnowledge): Promise<boolean> {
   const path = `town_knowledge/${item.id}`;
   try {
-    await setDoc(doc(db, 'town_knowledge', item.id), {
+    const payload = cleanForFirestore({
       ...item,
       updatedAt: Date.now()
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'town_knowledge', item.id), payload, { merge: true });
     recordFirestoreWrite();
     return true;
   } catch (error) {
@@ -341,7 +380,7 @@ export async function fetchCloudKnowledge(): Promise<AgentKnowledge[]> {
 export async function syncEconomyStateToCloud(economy: TownEconomyState): Promise<boolean> {
   const path = 'town_economy/current';
   try {
-    await setDoc(doc(db, 'town_economy', 'current'), {
+    const payload = cleanForFirestore({
       id: 'current',
       totalMoneySupply: economy.totalMoneySupply,
       totalResidentWealth: economy.totalResidentWealth,
@@ -350,10 +389,11 @@ export async function syncEconomyStateToCloud(economy: TownEconomyState): Promis
       municipalFund: economy.municipalFund,
       shops: economy.shops,
       products: economy.products,
-      recentTransactions: economy.recentTransactions.slice(0, 30),
-      activeEconomicEvents: economy.activeEconomicEvents,
+      recentTransactions: (economy.recentTransactions || []).slice(0, 30),
+      activeEconomicEvents: economy.activeEconomicEvents || [],
       updatedAt: Date.now()
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'town_economy', 'current'), payload, { merge: true });
     recordFirestoreWrite();
     return true;
   } catch (error) {
