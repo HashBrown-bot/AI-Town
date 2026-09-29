@@ -4,7 +4,7 @@ import {
   TrendingUp, 
   Brain, 
   Heart, 
-  Battery, 
+  Zap, 
   Smile, 
   AlertCircle, 
   BookOpen, 
@@ -24,7 +24,11 @@ import {
   Radio,
   Lock,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Scroll,
+  Shield,
+  Star,
+  Coins
 } from 'lucide-react';
 import { retrieveAgentMemories, DEFAULT_MEMORY_WEIGHTS, scoreMemory } from '../services/memorySystem';
 import { AgentDecisionPipeline } from './AgentDecisionPipeline';
@@ -83,11 +87,9 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
   const filteredMemories = useMemo(() => {
     const memories = currentAgent.memories || [];
     return memories.filter(m => {
-      // Type match
       const type = m.type || (m.associatedAgentId ? 'relationship' : 'episodic');
       if (memoryFilter !== 'all' && type !== memoryFilter) return false;
 
-      // Keyword search
       if (memorySearch.trim()) {
         const query = memorySearch.toLowerCase();
         const contentMatch = m.content.toLowerCase().includes(query);
@@ -130,42 +132,65 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
     }
   };
 
+  // Vitals for RPG Sheet
+  const energy = currentAgent.physicalNeeds?.energy ?? currentAgent.needs?.energy ?? currentAgent.state?.energy ?? 80;
+  const hunger = currentAgent.physicalNeeds?.hunger ?? currentAgent.needs?.hunger ?? 25;
+  const mood = currentAgent.psychologicalNeeds?.mood ?? currentAgent.needs?.mood ?? (currentAgent.state?.mood < 0 ? (currentAgent.state.mood + 100) / 2 : currentAgent.state.mood) ?? 75;
+  const stress = currentAgent.psychologicalNeeds?.stress ?? currentAgent.needs?.stress ?? currentAgent.state?.stress ?? 18;
+  const social = currentAgent.socialNeeds?.social ?? currentAgent.needs?.social ?? 60;
+  const curiosity = currentAgent.cognitiveNeeds?.curiosity ?? currentAgent.needs?.curiosity ?? 65;
+  const safety = currentAgent.needs?.safety ?? 85;
+  const achievement = currentAgent.cognitiveNeeds?.achievement ?? currentAgent.needs?.achievement ?? 60;
+
+  const vitals = [
+    { label: '心情', val: mood, icon: <Heart className="w-3.5 h-3.5 text-[#f28cb1]" />, bar: 'from-[#f28cb1] to-[#ff9ec4]' },
+    { label: '精力', val: energy, icon: <Zap className="w-3.5 h-3.5 text-[#ffc97a]" />, bar: 'from-[#ffb86b] to-[#ffc97a]' },
+    { label: '饱腹', val: 100 - hunger, icon: <span className="text-xs">🍞</span>, bar: 'from-[#f7a76c] to-[#ffb86b]' },
+    { label: '社交', val: social, icon: <Users className="w-3.5 h-3.5 text-[#73c7e8]" />, bar: 'from-[#73c7e8] to-[#65d6c4]' },
+    { label: '好奇', val: curiosity, icon: <Brain className="w-3.5 h-3.5 text-[#b9a6ff]" />, bar: 'from-[#9d8cff] to-[#b9a6ff]' },
+    { label: '安全', val: safety, icon: <Shield className="w-3.5 h-3.5 text-[#71c68b]" />, bar: 'from-[#71c68b] to-[#91d69d]' },
+    { label: '成就', val: achievement, icon: <Star className="w-3.5 h-3.5 text-[#ffc97a]" />, bar: 'from-[#ffc97a] to-[#fff1d6]' }
+  ];
+
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 p-6 space-y-6 text-slate-100">
+    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 text-[#f8f2e7] max-w-7xl mx-auto">
       {/* Header & Resident Selector Strip */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#344672]/30">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>居民行为演化与长期记忆系统</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-              Memory Retrieval + Reflection v2
+          <h2 className="text-xl font-bold text-[#f8f2e7] tracking-tight flex items-center gap-2">
+            <span>居民人物档案与心智演化卷</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/30 font-mono">
+              RPG Character Profile
             </span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            情境记忆(Episodic)、长期认知(Semantic)、反思领悟(Reflection)与居民印象检索架构
+          <p className="text-xs text-[#c9c5d1] mt-1">
+            见证居民的情感羁绊、多维生理心智维生、历史物语与反思顿悟演变
           </p>
         </div>
 
         {/* Resident Selector Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
           {agents.map(agent => {
             const isSelected = agent.id === currentAgent.id;
             return (
               <button
                 key={agent.id}
-                onClick={() => onSelectAgent(agent.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition shrink-0 ${
+                onClick={() => {
+                  soundEngine.playClick();
+                  onSelectAgent(agent.id);
+                }}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
                   isSelected
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30 ring-1 ring-blue-400/30'
-                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+                    ? 'bg-gradient-to-r from-[#2c3a5e] to-[#253252] text-[#fff1d6] border border-[#ffc97a]/45 shadow-[0_4px_12px_rgba(255,201,122,0.15)] scale-[1.02]'
+                    : 'game-panel text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#202b46]'
                 }`}
               >
                 <span
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: agent.spriteColor || '#3b82f6' }}
+                  className="w-2.5 h-2.5 rounded-full shadow-xs"
+                  style={{ backgroundColor: agent.spriteColor || '#ffb86b' }}
                 />
                 <span>{agent.name}</span>
-                <span className="text-[10px] opacity-75 font-mono">({agent.memories?.length || 0})</span>
+                <span className="text-[10px] text-[#ffc97a] opacity-80 font-mono">({agent.memories?.length || 0})</span>
               </button>
             );
           })}
@@ -175,170 +200,107 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
       {/* Main Agent Dossier Top Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card (1 Col) */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="game-panel-highlight p-5 space-y-4">
           <div className="flex items-start gap-4">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-lg border border-white/20 shrink-0"
-              style={{ backgroundColor: currentAgent.spriteColor || '#3b82f6' }}
+              className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shadow-lg border-2 border-[#ffc97a]/40 shrink-0"
+              style={{ backgroundColor: currentAgent.spriteColor || '#ffb86b' }}
             >
               {currentAgent.name.slice(0, 1)}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white truncate">{currentAgent.name}</h3>
-                <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[11px] font-mono font-medium">
+                <h3 className="text-lg font-bold text-[#f8f2e7] truncate">{currentAgent.name}</h3>
+                <span className="px-2 py-0.5 rounded-full bg-[#9d8cff]/20 text-[#b9a6ff] border border-[#9d8cff]/30 text-[11px] font-mono font-bold">
                   {currentAgent.mbti}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">{currentAgent.role}</p>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                {currentAgent.age} 岁 · {currentAgent.gender}
+              <p className="text-xs text-[#ffc97a] font-medium mt-0.5">{currentAgent.role}</p>
+              <p className="text-[11px] text-[#c9c5d1] mt-0.5 font-mono">
+                {currentAgent.age} 岁 · {currentAgent.gender} · 财富: {currentAgent.money ?? 150} 金币
               </p>
             </div>
           </div>
 
-          {/* Current Goal (Reflection Influenced) */}
-          <div className="p-3 rounded-xl bg-gradient-to-r from-blue-950/40 to-indigo-950/40 border border-blue-800/40 text-xs space-y-1">
-            <div className="flex items-center justify-between text-blue-400 font-semibold text-[10px] uppercase tracking-wider">
+          {/* Current Quest Goal */}
+          <div className="p-3 rounded-2xl bg-[#17223b]/70 border border-[#ffc97a]/30 text-xs space-y-1 shadow-xs">
+            <div className="flex items-center justify-between text-[#ffc97a] font-bold text-[10px] uppercase tracking-wider">
               <span className="flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-blue-400" />
-                <span>当前核心行动目标 (Goal)</span>
+                <Target className="w-3.5 h-3.5" />
+                <span>当前核心主线行动 (Quest Goal)</span>
               </span>
-              <span className="px-1.5 py-0.2 rounded bg-blue-500/20 text-[9px] font-mono">
-                由反思驱动
+              <span className="px-1.5 py-0.5 rounded bg-[#ffb86b]/20 text-[#fff1d6] text-[9px] font-mono">
+                反思驱动
               </span>
             </div>
-            <p className="text-slate-200 font-medium leading-relaxed pt-0.5">
-              {currentAgent.currentGoal || '在小镇维持日常生活并寻找社交伙伴'}
+            <p className="text-[#f8f2e7] font-medium leading-relaxed pt-0.5">
+              {currentAgent.goal?.title || currentAgent.currentGoal || '在小镇维持日常生活并寻找社交伙伴'}
             </p>
           </div>
 
-          {/* Current Activity & Thought Callout */}
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2 text-xs">
+          {/* Activity & Thought */}
+          <div className="p-3 rounded-2xl bg-[#17223b]/50 border border-[#344672]/30 space-y-2 text-xs">
             <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                当前活动场所
+              <span className="text-[10px] text-[#8f93a8] uppercase tracking-wider font-semibold">
+                当前驻足地点
               </span>
-              <div className="text-slate-200 font-medium mt-0.5 flex items-center gap-1.5">
-                <span>{currentBuilding?.icon || '📍'}</span>
+              <div className="text-[#fff1d6] font-medium mt-0.5 flex items-center gap-1.5">
+                <span>{currentBuilding?.icon || '🏡'}</span>
                 <span>{currentBuilding?.name || '小镇漫步中'}</span>
               </div>
             </div>
 
             <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                心声与此刻思绪
+              <span className="text-[10px] text-[#8f93a8] uppercase tracking-wider font-semibold">
+                此刻心声
               </span>
-              <p className="text-slate-300 italic mt-0.5">
+              <p className="text-[#c9c5d1] italic mt-0.5 leading-relaxed">
                 "{currentAgent.currentThought}"
               </p>
             </div>
           </div>
 
-          {/* Live State Meters */}
+          {/* 7 RPG Vitals Meters */}
           <div className="space-y-2.5 pt-1">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              即时生理与心理状态
+            <div className="text-xs font-bold text-[#ffc97a] uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#ffc97a]" />
+              <span>RPG 维生状态条 (Vitals)</span>
             </div>
 
-            {/* Active Condition Badges */}
-            {currentAgent.activeConditionTags && currentAgent.activeConditionTags.length > 0 && (
-              <div className="flex flex-wrap gap-1 pb-1">
-                {currentAgent.activeConditionTags.map((tag, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-950/80 text-indigo-300 border border-indigo-700/40"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-
             <div className="space-y-2 text-xs">
-              <div>
-                <div className="flex justify-between text-slate-300 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <Battery className="w-3.5 h-3.5 text-amber-400" />
-                    <span>精力 (Energy)</span>
-                  </span>
-                  <span className="font-mono">{currentAgent.physicalNeeds?.energy ?? currentAgent.state.energy}%</span>
+              {vitals.map(v => (
+                <div key={v.label}>
+                  <div className="flex justify-between text-[#c9c5d1] mb-1 text-[11px]">
+                    <span className="flex items-center gap-1.5">
+                      {v.icon}
+                      <span>{v.label}</span>
+                    </span>
+                    <span className="font-mono font-bold text-[#f8f2e7]">{Math.round(v.val)}%</span>
+                  </div>
+                  <div className="w-full bg-[#17223b] rounded-full h-1.5 overflow-hidden border border-[#344672]/20">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${v.bar} transition-all duration-300`}
+                      style={{ width: `${Math.max(4, Math.min(100, v.val))}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5">
-                  <div
-                    className="bg-amber-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${currentAgent.physicalNeeds?.energy ?? currentAgent.state.energy}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-slate-300 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-emerald-400">🌿</span>
-                    <span>健康 (Health)</span>
-                  </span>
-                  <span className="font-mono text-emerald-400">{Math.round(currentAgent.physicalNeeds?.health ?? currentAgent.needs?.health ?? 90)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5">
-                  <div
-                    className="bg-emerald-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${currentAgent.physicalNeeds?.health ?? currentAgent.needs?.health ?? 90}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-slate-300 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <Smile className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>心情愉悦度 (Mood)</span>
-                  </span>
-                  <span className="font-mono">
-                    {Math.round(currentAgent.psychologicalNeeds?.mood ?? currentAgent.state.mood)}%
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5">
-                  <div
-                    className="bg-emerald-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round(currentAgent.psychologicalNeeds?.mood ?? currentAgent.state.mood)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-slate-300 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                    <span>压力负荷 (Stress)</span>
-                  </span>
-                  <span className="font-mono">{Math.round(currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      (currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress) > 45 ? 'bg-rose-500' : 'bg-blue-500'
-                    }`}
-                    style={{ width: `${Math.round(currentAgent.psychologicalNeeds?.stress ?? currentAgent.state.stress)}%` }}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
           {/* Trigger Reflection Action Button */}
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2 border-t border-[#344672]/30">
             <button
               onClick={handleManualReflect}
               disabled={isReflecting}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-medium text-xs shadow-md shadow-indigo-900/30 flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="game-btn-special w-full py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
             >
-              <Lightbulb className={`w-4 h-4 text-amber-300 ${isReflecting ? 'animate-spin' : ''}`} />
-              <span>{isReflecting ? 'Gemini 正在进行反思与顿悟...' : `让 ${currentAgent.name} 触发深度反思 (Reflection)`}</span>
+              <Lightbulb className={`w-4 h-4 text-[#ffc97a] ${isReflecting ? 'animate-spin' : ''}`} />
+              <span>{isReflecting ? 'Gemini 正在进行深度顿悟...' : `让 ${currentAgent.name} 触发心智顿悟 (Reflection)`}</span>
             </button>
-            <p className="text-[10px] text-slate-500 text-center mt-1.5">
-              基于近期事件记忆提炼长期认知，将重塑行动目标与人际信任
+            <p className="text-[10px] text-[#8f93a8] text-center mt-1.5">
+              提炼近期生活记忆，沉淀长期认知并重塑行动目标与人际信任
             </p>
           </div>
         </div>
@@ -346,18 +308,18 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
         {/* Mood Trajectory Curve & Social Matrix (2 Cols) */}
         <div className="lg:col-span-2 space-y-6">
           {/* Mood Trend Timeline Chart */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-semibold text-sm text-white flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <span>情绪与压力时间序列演变趋势图</span>
+          <div className="game-panel p-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#344672]/30">
+              <h3 className="font-bold text-sm text-[#f8f2e7] flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#71c68b]" />
+                <span>情绪与压力时序轨迹 (Mood & Stress Timeline)</span>
               </h3>
               <div className="flex items-center gap-3 text-xs font-mono">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <span className="w-2.5 h-0.5 bg-emerald-400 rounded" /> 心情指数
+                <span className="flex items-center gap-1.5 text-[#71c68b]">
+                  <span className="w-2.5 h-1 bg-[#71c68b] rounded" /> 心情指数
                 </span>
-                <span className="flex items-center gap-1.5 text-rose-400">
-                  <span className="w-2.5 h-0.5 bg-rose-400 rounded" /> 压力负荷
+                <span className="flex items-center gap-1.5 text-[#f43f5e]">
+                  <span className="w-2.5 h-1 bg-[#f43f5e] rounded" /> 压力负荷
                 </span>
               </div>
             </div>
@@ -365,9 +327,9 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
             {/* SVG Visual Chart */}
             <div className="h-44 mt-4 relative flex items-end">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 500 140">
-                <line x1="0" y1="20" x2="500" y2="20" stroke="#1e293b" strokeDasharray="3 3" />
-                <line x1="0" y1="70" x2="500" y2="70" stroke="#334155" />
-                <line x1="0" y1="120" x2="500" y2="120" stroke="#1e293b" strokeDasharray="3 3" />
+                <line x1="0" y1="20" x2="500" y2="20" stroke="#253556" strokeDasharray="3 3" />
+                <line x1="0" y1="70" x2="500" y2="70" stroke="#374b75" />
+                <line x1="0" y1="120" x2="500" y2="120" stroke="#253556" strokeDasharray="3 3" />
 
                 {(() => {
                   const history = currentAgent.moodHistory || [];
@@ -386,15 +348,15 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
 
                   return (
                     <>
-                      <polyline fill="none" stroke="#10b981" strokeWidth="2.5" points={points} />
+                      <polyline fill="none" stroke="#71c68b" strokeWidth="2.5" points={points} />
                       <polyline fill="none" stroke="#f43f5e" strokeWidth="2" strokeDasharray="4 4" points={stressPoints} />
                       {history.map((pt, i) => {
                         const x = (i / (history.length - 1)) * 480 + 10;
                         const yMood = 70 - (pt.mood / 100) * 50;
                         return (
                           <g key={i}>
-                            <circle cx={x} cy={yMood} r="3.5" fill="#10b981" />
-                            <text x={x} y="138" fill="#64748b" fontSize="9" textAnchor="middle" fontFamily="monospace">
+                            <circle cx={x} cy={yMood} r="3.5" fill="#71c68b" />
+                            <text x={x} y="138" fill="#8f93a8" fontSize="9" textAnchor="middle" fontFamily="monospace">
                               {pt.simTime}
                             </text>
                           </g>
@@ -408,436 +370,130 @@ export const AgentEvolutionView: React.FC<AgentEvolutionViewProps> = ({
           </div>
 
           {/* Relationship 2.0 Multi-Dimensional Bonds & Inspector */}
-          <RelationshipInspector
-            currentAgent={currentAgent}
-            allAgents={agents}
-            onSelectTargetAgent={onSelectAgent}
-          />
+          <div className="game-panel p-5">
+            <RelationshipInspector
+              currentAgent={currentAgent}
+              allAgents={agents}
+              onSelectTargetAgent={onSelectAgent}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Autonomous Decision System Pipeline (Needs -> Goal -> Plan -> Action) */}
-      <AgentDecisionPipeline
-        agent={currentAgent}
-        buildings={buildings}
-        otherAgents={agents}
-        weather={weather}
-      />
-
-      {/* Resident Independent Knowledge & Rumor Horizon */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Radio className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <span>{currentAgent.name} 的独立认知与情报库 (Independent Knowledge Base)</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
-                  {agentKnownItems.length} 条已获悉情报
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                非全知视界：仅包含亲眼所见、他人告知、工作领会与听闻之传闻
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {agentKnownItems.length === 0 ? (
-          <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
-            该居民目前尚未目击特殊事件或听闻小镇传闻，保持着安宁本职的生活视界。
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {agentKnownItems.map(item => {
-              const myNode = item.propagationChain.find(n => n.agentId === currentAgent.id);
-              const typeCfg = INFO_TYPE_CONFIG[item.infoType];
-              const isOrigin = item.originalSourceAgentId === currentAgent.id;
-
-              return (
-                <div
-                  key={item.id}
-                  className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition space-y-2 text-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${typeCfg.badgeBg} ${typeCfg.badgeText} ${typeCfg.badgeBorder}`}>
-                        {typeCfg.icon} {typeCfg.label}
-                      </span>
-                      {item.isSecret && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-0.5">
-                          <Lock className="w-2.5 h-2.5" />
-                          <span>保守的机密</span>
-                        </span>
-                      )}
-                      {isOrigin && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                          亲历发起
-                        </span>
-                      )}
-                    </div>
-
-                    {myNode && (
-                      myNode.believed ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 flex items-center gap-0.5 font-mono">
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                          <span>深信 ({myNode.confidence}%)</span>
-                        </span>
-                      ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-400 border border-rose-800/40 flex items-center gap-0.5 font-mono">
-                          <XCircle className="w-2.5 h-2.5" />
-                          <span>心存怀疑</span>
-                        </span>
-                      )
-                    )}
-                  </div>
-
-                  <h4 className="font-bold text-slate-100">
-                    {item.subject}
-                  </h4>
-
-                  <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-900/50 p-2 rounded-lg border border-slate-800/50">
-                    “{myNode?.content || item.content}”
-                  </p>
-
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 font-mono">
-                    <span>
-                      {myNode?.receivedFromAgentName ? `听自 @${myNode.receivedFromAgentName}` : '工作/亲身亲历'}
-                    </span>
-                    {myNode?.reason && (
-                      <span className="text-slate-400 italic truncate max-w-[200px]" title={myNode.reason}>
-                        {myNode.reason}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      {/* Autonomous Decision System Pipeline */}
+      <div className="game-panel p-5">
+        <AgentDecisionPipeline
+          agent={currentAgent}
+          buildings={buildings}
+          otherAgents={agents}
+          weather={weather}
+        />
       </div>
 
-      {/* Memory Retrieval Simulator & Inspector Panel */}
-      <div className="bg-slate-900/90 border border-indigo-900/40 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      {/* RPG Memory Grimoire & Adventure Cards */}
+      <div className="game-panel p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#344672]/30">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-              <Brain className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-[#ffb86b]/15 border border-[#ffb86b]/30 flex items-center justify-center text-[#ffc97a]">
+              <BookOpen className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <span>记忆检索模拟器 (Memory Retrieval Simulator)</span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">
-                  Top-K Scorer
+              <h3 className="font-bold text-sm text-[#f8f2e7] flex items-center gap-2">
+                <span>小镇心路纪事簿 (Memory Grimoire)</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/30 font-mono">
+                  {filteredMemories.length} 篇物语
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">
-                实时模拟当 {currentAgent.name} 与选定居民交谈或做决定时，系统检索出的 Top-K 记忆与 Gemini Prompt 上下文
+              <p className="text-xs text-[#c9c5d1]">
+                情境见闻、社交印象与心智顿悟记录
               </p>
             </div>
           </div>
 
-          {/* Target Resident Selector */}
+          {/* Search & Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 whitespace-nowrap">对话交互对象:</span>
-            <select
-              value={simulatorTargetAgentId}
-              onChange={e => setSimulatorTargetAgentId(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              {agents
-                .filter(a => a.id !== currentAgent.id)
-                .map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.role})
-                  </option>
-                ))}
-            </select>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#8f93a8]" />
+              <input
+                type="text"
+                value={memorySearch}
+                onChange={e => setMemorySearch(e.target.value)}
+                placeholder="检索记忆关键词..."
+                className="pl-8 pr-3 py-1.5 rounded-xl bg-[#17223b] border border-[#344672]/40 text-xs text-[#f8f2e7] placeholder-[#8f93a8] focus:outline-none focus:border-[#ffc97a]/50"
+              />
+            </div>
+          </div>
+        </div>
 
+        {/* Filter Categories */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { key: 'all', label: `全部 (${memoryCounts.all})` },
+            { key: 'reflection', label: `🌟 心智顿悟 (${memoryCounts.reflection})` },
+            { key: 'relationship', label: `💬 羁绊对话 (${memoryCounts.relationship})` },
+            { key: 'episodic', label: `📜 情境见闻 (${memoryCounts.episodic})` },
+            { key: 'semantic', label: `🧠 认知常识 (${memoryCounts.semantic})` }
+          ].map(tab => (
             <button
-              onClick={() => setShowPromptInspector(!showPromptInspector)}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition"
+              key={tab.key}
+              onClick={() => {
+                soundEngine.playClick();
+                setMemoryFilter(tab.key as any);
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                memoryFilter === tab.key
+                  ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] shadow-xs'
+                  : 'bg-[#202b46]/70 text-[#c9c5d1] hover:text-[#fff1d6] hover:bg-[#273552]'
+              }`}
             >
-              <Eye className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{showPromptInspector ? '隐藏 Prompt 注入' : '查看 Prompt 注入'}</span>
+              {tab.label}
             </button>
-          </div>
+          ))}
         </div>
 
-        {/* Formula breakdown indicator banner */}
-        <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-            <span>评分公式:</span>
-            <span className="text-slate-300">
-              Score = 重要度 × {DEFAULT_MEMORY_WEIGHTS.importance} + 相关度 × {DEFAULT_MEMORY_WEIGHTS.relevance} + 时效衰减 × {DEFAULT_MEMORY_WEIGHTS.recency} + 情绪烈度 × {DEFAULT_MEMORY_WEIGHTS.emotionalIntensity}
-            </span>
-          </div>
-          <span className="text-indigo-400">已检索出 {simulatedRetrieval.topMemories.length} 条高权重记忆</span>
-        </div>
-
-        {/* Prompt Context View Collapsible */}
-        {showPromptInspector && (
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-indigo-900/50 space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono text-indigo-400">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Gemini API 注入上下文 (Formatted Retrieval Context)</span>
-              </span>
-              <span className="text-[10px] text-slate-500">将注入对话生成模型</span>
-            </div>
-            <pre className="p-3 rounded-lg bg-slate-900 text-slate-300 text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-              {simulatedRetrieval.formattedPromptContext}
-            </pre>
-          </div>
-        )}
-
-        {/* Retrieved Top-K Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {simulatedRetrieval.topMemories.map((m, idx) => {
-            const memoryScore = m.score || 0;
-            const memoryRelevance = m.relevance || 0;
-            const memoryRecency = m.recency || 0;
+        {/* Memory Adventure Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
+          {filteredMemories.map((mem, idx) => {
+            const isReflection = mem.type === 'reflection';
+            const isRel = mem.type === 'relationship' || mem.associatedAgentId;
 
             return (
               <div
-                key={m.id}
-                className="p-3.5 rounded-xl bg-slate-950/70 border border-indigo-950/60 hover:border-indigo-800/60 transition space-y-2 text-xs"
+                key={mem.id || idx}
+                className={`p-4 rounded-2xl border transition flex flex-col justify-between text-xs ${
+                  isReflection
+                    ? 'bg-gradient-to-br from-[#2a244d] to-[#1e1c38] border-[#9d8cff]/40 shadow-sm'
+                    : isRel
+                    ? 'bg-gradient-to-br from-[#202b46] to-[#1c2742] border-[#73c7e8]/30'
+                    : 'bg-[#202b46]/60 border-[#344672]/30'
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-[10px]">
-                      #{idx + 1}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-[10px] px-2 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/20">
+                      {isReflection ? '🌟 顿悟' : isRel ? '💬 羁绊' : '📜 见闻'} #{idx + 1}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-400">
-                      {m.type === 'reflection' ? '💡 反思' : m.type === 'semantic' ? '🏛️ 认知' : m.type === 'relationship' ? '🤝 印象' : '⚡ 事件'}
+                    <span className="font-mono text-[10px] text-[#8f93a8]">
+                      第 {mem.simDay || 1} 天 · {mem.simTime || '09:00'}
                     </span>
-                  </span>
+                  </div>
 
-                  <span className="font-mono font-bold text-indigo-400">
-                    综合分: {memoryScore.toFixed(3)}
-                  </span>
+                  <p className="text-[#f8f2e7] leading-relaxed text-xs">
+                    "{mem.content}"
+                  </p>
                 </div>
 
-                <p className="text-slate-200 font-medium leading-relaxed line-clamp-3">
-                  {m.content}
-                </p>
-
-                {/* Score component badges */}
-                <div className="pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                  <span>重要度: <b className="text-blue-400">{m.importance}/10</b></span>
-                  <span>相关度: <b className="text-amber-400">{(memoryRelevance * 100).toFixed(0)}%</b></span>
-                  <span>时效: <b className="text-emerald-400">{(memoryRecency * 100).toFixed(0)}%</b></span>
+                <div className="mt-3 pt-2 border-t border-[#344672]/20 flex items-center justify-between text-[10px] text-[#c9c5d1]">
+                  <span>重要度: <strong className="text-[#ffc97a] font-mono">{mem.importance}/10</strong></span>
+                  {mem.tags && mem.tags.length > 0 && (
+                    <span className="text-[#8f93a8] truncate max-w-[120px]">
+                      #{mem.tags[0]}
+                    </span>
+                  )}
                 </div>
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Complete Long-Term Memory System (Categorized Tabs) */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-800">
-          <div>
-            <h3 className="font-semibold text-sm text-white flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-400" />
-              <span>全量长期记忆库与认知沉淀 (Long-Term Memory Vault)</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              已沉淀 {currentAgent.memories?.length || 0} 条记忆，按类型划分、衰减保护与定期整合
-            </p>
-          </div>
-
-          {/* Search Input */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="搜索记忆内容或标签..."
-              value={memorySearch}
-              onChange={e => setMemorySearch(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-48 sm:w-60"
-            />
-          </div>
-        </div>
-
-        {/* Category Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          <button
-            onClick={() => setMemoryFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
-              memoryFilter === 'all'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <span>全部记忆</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-              {memoryCounts.all}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setMemoryFilter('episodic')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
-              memoryFilter === 'episodic'
-                ? 'bg-amber-600 text-white'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-amber-400" />
-            <span>近期事件 (Episodic)</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-              {memoryCounts.episodic}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setMemoryFilter('semantic')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
-              memoryFilter === 'semantic'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Brain className="w-3.5 h-3.5 text-emerald-400" />
-            <span>长期认知 (Semantic)</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-              {memoryCounts.semantic}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setMemoryFilter('reflection')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
-              memoryFilter === 'reflection'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Lightbulb className="w-3.5 h-3.5 text-indigo-400" />
-            <span>反思悟道 (Reflection)</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-              {memoryCounts.reflection}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setMemoryFilter('relationship')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
-              memoryFilter === 'relationship'
-                ? 'bg-rose-600 text-white'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5 text-rose-400" />
-            <span>居民核心印象 (Relationship)</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-              {memoryCounts.relationship}
-            </span>
-          </button>
-        </div>
-
-        {/* Memories Cards List */}
-        <div className="space-y-3 pt-1">
-          {filteredMemories.length === 0 ? (
-            <div className="p-10 text-center text-slate-500 text-xs rounded-xl bg-slate-950 border border-slate-900">
-              暂未检索到符合条件的记忆记录
-            </div>
-          ) : (
-            filteredMemories.map(mem => {
-              const memType = mem.type || (mem.associatedAgentId ? 'relationship' : 'episodic');
-
-              // Badge configs for memory types
-              const typeConfig = {
-                episodic: {
-                  label: '情境事件',
-                  badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                  icon: <Flame className="w-3 h-3 text-amber-400" />
-                },
-                semantic: {
-                  label: '长期认知',
-                  badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-                  icon: <Brain className="w-3 h-3 text-emerald-400" />
-                },
-                reflection: {
-                  label: '深层反思',
-                  badgeBg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-                  icon: <Lightbulb className="w-3 h-3 text-indigo-400" />
-                },
-                relationship: {
-                  label: '居民印象',
-                  badgeBg: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-                  icon: <Users className="w-3 h-3 text-rose-400" />
-                }
-              }[memType];
-
-              return (
-                <div
-                  key={mem.id}
-                  className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition space-y-2 text-xs"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono font-medium ${typeConfig.badgeBg}`}>
-                        {typeConfig.icon}
-                        <span>{typeConfig.label}</span>
-                      </span>
-
-                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
-                        第 {mem.simDay} 天 {mem.simTime}
-                      </span>
-
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        重要度: <b className="text-blue-400">{mem.importance}/10</b>
-                      </span>
-
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        情绪烈度: <b className="text-purple-400">{mem.emotionalIntensity || 5}/10</b>
-                      </span>
-                    </div>
-
-                    {/* Related Agents Badges */}
-                    {mem.relatedAgentNames && mem.relatedAgentNames.length > 0 && (
-                      <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-                        <span>关联居民:</span>
-                        {mem.relatedAgentNames.map((name, i) => (
-                          <span key={i} className="px-1.5 py-0.5 rounded bg-blue-950/40 text-blue-300 border border-blue-800/30">
-                            @{name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Memory Content */}
-                  <p className="text-slate-200 leading-relaxed font-medium">
-                    {mem.content}
-                  </p>
-
-                  {/* Tags & Access Meta */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-900/60 text-[10px] text-slate-500">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {mem.tags?.map((tag, idx) => (
-                        <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    {mem.lastAccessedAt && (
-                      <div className="flex items-center gap-1 font-mono">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        <span>最近检索于: 第{mem.lastAccessedAt.simDay}天 {mem.lastAccessedAt.simTime}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
         </div>
       </div>
     </div>

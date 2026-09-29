@@ -6,12 +6,11 @@ import {
   SkipForward, 
   RotateCcw,
   Cloud, 
-  CloudCheck, 
   Volume2, 
   VolumeX, 
   Sparkles,
   MapPin,
-  BarChart3,
+  ScrollText,
   MessageSquareText,
   TrendingUp,
   UserCog,
@@ -19,7 +18,11 @@ import {
   BrainCircuit,
   Activity,
   Radio,
-  Coins
+  Coins,
+  Sun,
+  Moon,
+  CloudRain,
+  Compass
 } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
@@ -75,201 +78,193 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
     setIsAudioOn(nextState);
   };
 
-  const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+  const navItems: { key: TabKey; label: string; icon: React.ReactNode; badge?: string }[] = [
     { key: 'canvas', label: '小镇全景', icon: <MapPin className="w-4 h-4" /> },
-    { key: 'dashboard', label: '社会动态', icon: <BarChart3 className="w-4 h-4" /> },
-    { key: 'economy', label: '经济系统', icon: <Coins className="w-4 h-4 text-amber-400" /> },
-    { key: 'dialogues', label: '交互与记录', icon: <MessageSquareText className="w-4 h-4" /> },
-    { key: 'evolution', label: '行为演变', icon: <TrendingUp className="w-4 h-4" /> },
-    { key: 'information', label: '情报与流言', icon: <Radio className="w-4 h-4 text-amber-400" /> },
-    { key: 'personas', label: '个性化配置', icon: <UserCog className="w-4 h-4" /> },
-    { key: 'events', label: '事件触发器', icon: <Zap className="w-4 h-4" /> },
-    { key: 'analyzer', label: 'AI分析器', icon: <BrainCircuit className="w-4 h-4" /> },
-    { key: 'quota', label: '配额与容量', icon: <Activity className="w-4 h-4" /> }
+    { key: 'dashboard', label: '小镇纪事', icon: <ScrollText className="w-4 h-4" /> },
+    { key: 'economy', label: '小镇集市', icon: <Coins className="w-4 h-4 text-[#ffc97a]" /> },
+    { key: 'evolution', label: '居民档案', icon: <TrendingUp className="w-4 h-4 text-[#9d8cff]" /> },
+    { key: 'information', label: '星网情报', icon: <Radio className="w-4 h-4 text-[#7ce1cf]" /> },
+    { key: 'dialogues', label: '对话心声', icon: <MessageSquareText className="w-4 h-4" /> },
+    { key: 'events', label: '奇遇触发', icon: <Zap className="w-4 h-4 text-[#ffb86b]" /> },
+    { key: 'personas', label: '居民塑造', icon: <UserCog className="w-4 h-4" /> },
+    { key: 'analyzer', label: '全知视界', icon: <BrainCircuit className="w-4 h-4 text-[#f28cb1]" /> },
+    { key: 'quota', label: '配额洞察', icon: <Activity className="w-4 h-4" /> }
   ];
 
+  const weatherIcons: Record<string, React.ReactNode> = {
+    clear: <Sun className="w-3.5 h-3.5 text-[#ffc97a]" />,
+    golden_sunset: <Sun className="w-3.5 h-3.5 text-[#f7a76c]" />,
+    rainy: <CloudRain className="w-3.5 h-3.5 text-[#73c7e8]" />,
+    starry_night: <Moon className="w-3.5 h-3.5 text-[#b9a6ff]" />,
+    misty_morning: <Cloud className="w-3.5 h-3.5 text-[#c9c5d1]" />
+  };
+
+  const weatherLabels: Record<string, string> = {
+    clear: '天朗气清',
+    golden_sunset: '落霞流金',
+    rainy: '微雨润物',
+    starry_night: '星河璀璨',
+    misty_morning: '晨雾微光'
+  };
+
   return (
-    <header className="bg-slate-900 border-b border-slate-800 text-slate-100 select-none z-30 shrink-0">
-      {/* Top Bar: Title & Simulation Controls */}
-      <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80">
-        {/* Brand / Logo */}
+    <header className="relative z-30 shrink-0 select-none bg-[#17223b]/95 backdrop-blur-md border-b border-[#344672]/40 text-[#f8f2e7] shadow-xl">
+      {/* Top Main Game Bar */}
+      <div className="px-4 py-2 flex flex-wrap items-center justify-between gap-3 border-b border-[#2d3d63]/40">
+        {/* Left: Game Title & Realm Emblem */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-900/30 border border-blue-400/20 font-bold text-sm tracking-wider">
-            AE
+          <div className="relative group cursor-pointer" onClick={() => onSelectTab('canvas')}>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#ffb86b] via-[#f7a76c] to-[#9d8cff] p-0.5 shadow-[0_4px_16px_rgba(247,167,108,0.35)] transition-transform duration-200 group-hover:scale-105">
+              <div className="w-full h-full bg-[#17223b] rounded-[14px] flex items-center justify-center font-bold text-base tracking-wider text-[#ffc97a]">
+                ✨
+              </div>
+            </div>
+            <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-[#71c68b] border-2 border-[#17223b] rounded-full shadow-xs" />
           </div>
+
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-semibold text-sm tracking-tight text-white">
-                Aetheria 智能小镇
+              <h1 className="font-bold text-sm tracking-tight text-[#f8f2e7] flex items-center gap-1.5 font-sans">
+                <span>Aetheria</span>
+                <span className="text-[#ffc97a] font-normal text-xs">艾瑟利亚小镇</span>
               </h1>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                Gemini Agent 2.0
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#9d8cff]/15 text-[#b9a6ff] border border-[#9d8cff]/30">
+                Cozy RPG Sim
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              自主社交演化与行为分析实验沙盒
+            <p className="text-[11px] text-[#c9c5d1] hidden sm:block">
+              AI 居民自主生活 · 故事编织 · 虚拟社交生态
             </p>
           </div>
         </div>
 
-        {/* Simulation Clock & Speed Controls */}
-        <div className="flex items-center gap-2 bg-slate-950/70 border border-slate-800 rounded-xl px-3 py-1.5 shadow-inner">
-          <div className="flex items-center gap-2 mr-2">
-            <span className="px-2 py-0.5 rounded bg-slate-800 text-[11px] font-mono text-slate-300">
-              第 {simDay} 天
+        {/* Right: Simulation Clock, Weather & Speed HUD */}
+        <div className="flex items-center gap-2 bg-[#202b46]/90 border border-[#374973]/50 rounded-2xl px-3 py-1.5 shadow-inner">
+          {/* Day & Time Celestial Widget */}
+          <div className="flex items-center gap-2.5 pr-2">
+            <span className="px-2 py-0.5 rounded-lg bg-[#2a385c] text-[11px] font-bold text-[#ffc97a] border border-[#ffc97a]/20 shadow-xs">
+              Day {simDay}
             </span>
-            <span className="font-mono text-xs font-semibold text-slate-100">
-              {String(simHour).padStart(2, '0')}:{String(simMinute).padStart(2, '0')}
-            </span>
+            <div className="flex items-center gap-1 font-mono text-xs font-bold text-[#f8f2e7] tracking-wider">
+              {simHour >= 6 && simHour < 18 ? (
+                <Sun className="w-3.5 h-3.5 text-[#ffc97a]" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-[#b9a6ff]" />
+              )}
+              <span>{String(simHour).padStart(2, '0')}:{String(simMinute).padStart(2, '0')}</span>
+            </div>
           </div>
 
-          <div className="h-4 w-px bg-slate-800" />
+          <div className="h-4 w-px bg-[#374973]/60" />
 
-          {/* Speed Buttons */}
+          {/* Weather Cycling Button */}
+          <button
+            onClick={onCycleWeather}
+            title="点击切换小镇天气与昼夜环境"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-xl text-xs bg-[#273552]/80 hover:bg-[#344672] text-[#c9c5d1] hover:text-[#fff1d6] border border-[#3b4d75]/50 transition"
+          >
+            {weatherIcons[weather] || <Sun className="w-3.5 h-3.5 text-[#ffc97a]" />}
+            <span className="hidden md:inline font-medium text-[11px]">{weatherLabels[weather] || '天气'}</span>
+          </button>
+
+          <div className="h-4 w-px bg-[#374973]/60" />
+
+          {/* Speed Jewel Buttons */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => onSetSpeed(simSpeed === 0 ? 1 : 0)}
-              title={simSpeed === 0 ? '恢复模拟运行' : '暂停模拟'}
-              className={`p-1.5 rounded-lg transition ${
+              title={simSpeed === 0 ? '恢复时间流逝' : '暂停小镇时间'}
+              className={`p-1.5 rounded-xl transition ${
                 simSpeed === 0
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  ? 'bg-[#ffb86b]/20 text-[#ffc97a] border border-[#ffb86b]/40 shadow-xs'
+                  : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#273552]'
               }`}
             >
               {simSpeed === 0 ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
             </button>
-            <button
-              onClick={() => onSetSpeed(1)}
-              title="1x 正常步速"
-              className={`px-2 py-1 text-xs font-mono rounded-lg transition ${
-                simSpeed === 1
-                  ? 'bg-blue-600/30 text-blue-400 border border-blue-500/40 font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              1x
-            </button>
-            <button
-              onClick={() => onSetSpeed(2)}
-              title="2x 快速演化"
-              className={`px-2 py-1 text-xs font-mono rounded-lg transition ${
-                simSpeed === 2
-                  ? 'bg-blue-600/30 text-blue-400 border border-blue-500/40 font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              2x
-            </button>
-            <button
-              onClick={() => onSetSpeed(5)}
-              title="5x 疾速模拟"
-              className={`p-1.5 rounded-lg transition ${
-                simSpeed === 5
-                  ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40 font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <FastForward className="w-3.5 h-3.5" />
-            </button>
+
+            {[1, 2, 5].map(speed => (
+              <button
+                key={speed}
+                onClick={() => onSetSpeed(speed)}
+                title={`${speed}x 演化倍速`}
+                className={`px-2 py-0.5 text-xs font-mono font-bold rounded-xl transition ${
+                  simSpeed === speed
+                    ? 'bg-gradient-to-r from-[#ffb86b]/25 to-[#f7a76c]/25 text-[#ffc97a] border border-[#ffb86b]/40 shadow-xs'
+                    : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#273552]'
+                }`}
+              >
+                {speed}x
+              </button>
+            ))}
+
             <button
               onClick={onSkipHour}
-              title="推进 1 小时"
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+              title="快进 1 小时 (+1h)"
+              className="p-1.5 text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#273552] rounded-xl transition ml-0.5"
             >
               <SkipForward className="w-3.5 h-3.5" />
             </button>
-            {onResetSimulation && (
-              <button
-                onClick={onResetSimulation}
-                title="重新开始小镇时间 (重置至第1天)"
-                className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
-        </div>
 
-        {/* Status Indicators & Right Controls */}
-        <div className="flex items-center gap-2">
-          {/* Weather Toggle */}
-          <button
-            onClick={onCycleWeather}
-            title="切换天气与昼夜光照"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300 hover:text-white hover:bg-slate-800 transition"
-          >
-            <span>
-              {weather === 'rainy' ? '🌧️ 微雨' : weather === 'golden_sunset' ? '🌅 落霞' : weather === 'starry_night' ? '🌌 星夜' : '☀️ 晴空'}
-            </span>
-          </button>
+          <div className="h-4 w-px bg-[#374973]/60" />
 
-          {/* Audio Ambient Toggle */}
+          {/* Ambient BGM Audio Toggle */}
           <button
             onClick={handleToggleSound}
-            title={isAudioOn ? '点击静音像素环境音' : '点击开启轻柔环境音效'}
-            className={`p-1.5 rounded-xl border transition ${
+            title={isAudioOn ? '静音治愈背景乐' : '开启小镇治愈环境音'}
+            className={`p-1.5 rounded-xl transition ${
               isAudioOn
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                : 'bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200'
+                ? 'bg-[#71c68b]/20 text-[#91d69d] border border-[#71c68b]/40'
+                : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#273552]'
             }`}
           >
-            {isAudioOn ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
+            {isAudioOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Cloud Firestore Status & Quota Badge (Clickable to open monitor) */}
-          <button
-            onClick={() => {
-              onSelectTab('quota');
-              soundEngine.playClick();
-            }}
-            title="查看 Google API 配额与 Firestore 云端容量看板"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs font-mono transition cursor-pointer"
-          >
-            <CloudCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-300 text-[11px] font-medium hidden md:inline">
-              云端配额
-            </span>
-            <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-emerald-300 font-semibold">
-              {cloudSyncCount} 条
-            </span>
-          </button>
-
-          {/* Quick AI Analyze Button */}
-          <button
-            onClick={onTriggerAnalyze}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-medium shadow-md shadow-blue-900/20 transition active:scale-95"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">AI 态势评估</span>
-          </button>
+          {/* Reset Time Button */}
+          {onResetSimulation && (
+            <button
+              onClick={onResetSimulation}
+              title="重置小镇日历回第 1 天"
+              className="p-1.5 text-[#8f93a8] hover:text-[#f28cb1] hover:bg-[#273552] rounded-xl transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Tabs Navigation Bar */}
-      <nav className="flex items-center gap-1 px-4 py-1.5 overflow-x-auto no-scrollbar bg-slate-950/40">
+      {/* Bottom Game HUD Navigation Tabs */}
+      <div className="px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar bg-[#17223b]/60">
         {navItems.map(item => {
           const isActive = currentTab === item.key;
           return (
             <button
               key={item.key}
               onClick={() => {
-                onSelectTab(item.key);
                 soundEngine.playClick();
+                onSelectTab(item.key);
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+              className={`relative px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all duration-200 ${
                 isActive
-                  ? 'bg-slate-800 text-blue-400 border border-slate-700/80 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                  ? 'bg-gradient-to-r from-[#2c3a5e] to-[#253252] text-[#fff1d6] border border-[#ffc97a]/40 shadow-[0_4px_12px_rgba(255,201,122,0.15)] scale-[1.02]'
+                  : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#202b46]/70 border border-transparent'
               }`}
             >
-              <span className={isActive ? 'text-blue-400' : 'text-slate-500'}>
+              <span className={isActive ? 'text-[#ffc97a]' : 'text-[#8f93a8]'}>
                 {item.icon}
               </span>
               <span>{item.label}</span>
+
+              {/* Runic active underline */}
+              {isActive && (
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-1 bg-gradient-to-r from-[#ffc97a] to-[#f7a76c] rounded-full shadow-[0_0_8px_#ffc97a]" />
+              )}
             </button>
           );
         })}
-      </nav>
+      </div>
     </header>
   );
 };

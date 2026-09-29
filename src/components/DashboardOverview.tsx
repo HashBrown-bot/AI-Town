@@ -3,8 +3,7 @@ import { Agent, Building, InteractionRecord, TownAnalysis } from '../types/town'
 import { 
   Users, 
   MessageSquare, 
-  HeartHandshake, 
-  AlertTriangle, 
+  Heart, 
   Sparkles, 
   Building2, 
   Compass, 
@@ -12,8 +11,19 @@ import {
   TrendingUp,
   Flame,
   CheckCircle2,
-  Database
+  Database,
+  Coins,
+  Sun,
+  Moon,
+  CloudRain,
+  Scroll,
+  BookOpen,
+  MapPin,
+  Smile,
+  ShieldCheck,
+  Star
 } from 'lucide-react';
+import { soundEngine } from '../utils/audioSystem';
 
 interface DashboardOverviewProps {
   agents: Agent[];
@@ -46,7 +56,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   
   const avgMood = Math.round(agents.reduce((acc, a) => acc + (a.psychologicalNeeds?.mood ?? (a.state.mood < 0 ? (a.state.mood + 100) / 2 : a.state.mood)), 0) / (agents.length || 1));
   const avgStress = Math.round(agents.reduce((acc, a) => acc + (a.psychologicalNeeds?.stress ?? a.state.stress), 0) / (agents.length || 1));
-  const conflictIndex = Math.min(100, Math.round((conflictInteractions / (totalInteractions || 1)) * 100 + (avgStress * 0.3)));
+  const totalWealth = agents.reduce((acc, a) => acc + (a.money || 150), 0);
 
   // Location popularity ranking
   const locationCounts: Record<string, number> = {};
@@ -55,7 +65,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   });
   const sortedLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]);
 
-  // Social Network Graph Canvas Renderer
+  // Social Constellation Graph Canvas Renderer
   useEffect(() => {
     const canvas = networkCanvasRef.current;
     if (!canvas) return;
@@ -70,20 +80,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    // Node layout positions in a circle
+    // Stardust background particles
+    const stars: { x: number; y: number; r: number; alpha: number; pulse: number }[] = [];
+    for (let i = 0; i < 40; i++) {
+      stars.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: 0.8 + Math.random() * 1.5,
+        alpha: 0.2 + Math.random() * 0.6,
+        pulse: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Node layout positions in a graceful circle with subtle floating oscillation
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(width, height) * 0.38;
-
-    const nodePositions: Record<string, { x: number; y: number; agent: Agent }> = {};
-    agents.forEach((agent, idx) => {
-      const angle = (idx / agents.length) * Math.PI * 2 - Math.PI / 2;
-      nodePositions[agent.id] = {
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius,
-        agent
-      };
-    });
 
     let tick = 0;
 
@@ -91,7 +103,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       tick++;
       ctx.clearRect(0, 0, width, height);
 
-      // Draw Relationship Connecting Lines
+      // 1. Draw Starfield Background
+      stars.forEach(s => {
+        const a = s.alpha + Math.sin(tick * 0.05 + s.pulse) * 0.2;
+        ctx.fillStyle = `rgba(255, 241, 214, ${Math.max(0.1, Math.min(1, a))})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // 2. Compute Node Positions with gentle floating
+      const nodePositions: Record<string, { x: number; y: number; agent: Agent }> = {};
+      agents.forEach((agent, idx) => {
+        const baseAngle = (idx / agents.length) * Math.PI * 2 - Math.PI / 2;
+        const floatOffset = Math.sin(tick * 0.04 + idx * 1.2) * 4;
+        const currentRadius = radius + floatOffset;
+        nodePositions[agent.id] = {
+          x: centerX + Math.cos(baseAngle) * currentRadius,
+          y: centerY + Math.sin(baseAngle) * currentRadius,
+          agent
+        };
+      });
+
+      // 3. Draw Constellation Connection Lines
       agents.forEach(agentA => {
         const posA = nodePositions[agentA.id];
         if (!posA) return;
@@ -108,35 +142,40 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           
           const stage = rel?.relationshipStage || (score < -20 ? 'enemy' : score > 40 ? 'close_friend' : score > 15 ? 'friend' : 'acquaintance');
           const absScore = Math.abs(score);
-          const alpha = Math.min(0.85, Math.max(0.2, absScore / 70));
+          const alpha = Math.min(0.85, Math.max(0.18, absScore / 70));
 
           ctx.beginPath();
           ctx.moveTo(posA.x, posA.y);
           ctx.lineTo(posB.x, posB.y);
 
           if (stage === 'enemy') {
+            // Hostile Red
             ctx.strokeStyle = `rgba(244, 63, 94, ${alpha})`;
-            ctx.lineWidth = 1.5 + (absScore / 30);
+            ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
           } else if (stage === 'rival') {
-            ctx.strokeStyle = `rgba(245, 158, 11, ${alpha})`;
-            ctx.lineWidth = 1.5 + (absScore / 35);
+            // Rival Amber
+            ctx.strokeStyle = `rgba(247, 167, 108, ${alpha})`;
+            ctx.lineWidth = 1.8;
             ctx.setLineDash([5, 3]);
           } else if (stage === 'partner' || stage === 'romantic_interest') {
-            ctx.strokeStyle = `rgba(236, 72, 153, ${alpha})`;
-            ctx.lineWidth = 2 + (absScore / 30);
+            // Deep Romantic Rose
+            ctx.strokeStyle = `rgba(242, 140, 177, ${alpha})`;
+            ctx.lineWidth = 2.4;
             ctx.setLineDash([]);
           } else if (stage === 'close_friend') {
-            ctx.strokeStyle = `rgba(20, 184, 166, ${alpha})`;
-            ctx.lineWidth = 2 + (absScore / 30);
+            // Close Friend Emerald / Teal
+            ctx.strokeStyle = `rgba(101, 214, 196, ${alpha})`;
+            ctx.lineWidth = 2.2;
             ctx.setLineDash([]);
           } else if (score < 0) {
             ctx.strokeStyle = `rgba(239, 68, 68, ${alpha})`;
-            ctx.lineWidth = 1 + (absScore / 30);
+            ctx.lineWidth = 1.2;
             ctx.setLineDash([4, 4]);
           } else {
-            ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
-            ctx.lineWidth = 1 + (absScore / 35);
+            // Celestial Starlight Cyan
+            ctx.strokeStyle = `rgba(115, 199, 232, ${alpha})`;
+            ctx.lineWidth = 1.4;
             ctx.setLineDash([]);
           }
 
@@ -145,440 +184,395 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         });
       });
 
-      // Draw Nodes
+      // 4. Draw Resident Nodes as Glowing Celestial Orbs
       Object.entries(nodePositions).forEach(([id, { x, y, agent }]) => {
         const isHovered = hoveredNode === id;
-        const nodeRadius = isHovered ? 20 : 16;
+        const nodeColor = agent.spriteColor || '#ffb86b';
 
-        // Outer glow
-        if (isHovered) {
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-          ctx.beginPath();
-          ctx.arc(x, y, nodeRadius + 8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Node Circle
-        ctx.fillStyle = agent.spriteColor || '#3b82f6';
+        // Outer Aura
+        const auraGrad = ctx.createRadialGradient(x, y, 4, x, y, isHovered ? 26 : 18);
+        auraGrad.addColorStop(0, `${nodeColor}66`);
+        auraGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = auraGrad;
         ctx.beginPath();
-        ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, isHovered ? 26 : 18, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = isHovered ? '#38bdf8' : '#0f172a';
-        ctx.lineWidth = 2.5;
+        // Node Circle
+        ctx.fillStyle = '#17223b';
+        ctx.beginPath();
+        ctx.arc(x, y, isHovered ? 17 : 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = isHovered ? '#ffc97a' : nodeColor;
+        ctx.lineWidth = isHovered ? 2.5 : 1.8;
         ctx.stroke();
 
-        // Agent Name
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = isHovered ? 'bold 11px "Plus Jakarta Sans"' : '10px "Plus Jakarta Sans"';
+        // Resident Initial
+        ctx.fillStyle = '#f8f2e7';
+        ctx.font = `bold ${isHovered ? 12 : 10}px "Plus Jakarta Sans", sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(agent.name, x, y + nodeRadius + 14);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(agent.name.slice(0, 1), x, y);
 
-        // Role snippet
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '9px "Plus Jakarta Sans"';
-        ctx.fillText(agent.mbti, x, y + nodeRadius + 25);
+        // Name & Role Tag beneath node
+        ctx.fillStyle = '#f8f2e7';
+        ctx.font = 'bold 10px "Plus Jakarta Sans", sans-serif';
+        ctx.fillText(agent.name, x, y + (isHovered ? 26 : 22));
+
+        ctx.fillStyle = '#c9c5d1';
+        ctx.font = '8px "Plus Jakarta Sans", sans-serif';
+        ctx.fillText(agent.role || '小镇居民', x, y + (isHovered ? 36 : 31));
       });
 
       animId = requestAnimationFrame(renderGraph);
     };
 
-    renderGraph();
+    animId = requestAnimationFrame(renderGraph);
+
+    // Canvas click to select resident
+    const handleCanvasClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      agents.forEach((agent, idx) => {
+        const baseAngle = (idx / agents.length) * Math.PI * 2 - Math.PI / 2;
+        const currentRadius = radius;
+        const nx = centerX + Math.cos(baseAngle) * currentRadius;
+        const ny = centerY + Math.sin(baseAngle) * currentRadius;
+
+        if (Math.hypot(clickX - nx, clickY - ny) < 22) {
+          soundEngine.playClick();
+          onSelectAgent(agent.id);
+        }
+      });
+    };
+
+    canvas.addEventListener('click', handleCanvasClick);
 
     return () => {
       cancelAnimationFrame(animId);
+      canvas.removeEventListener('click', handleCanvasClick);
     };
-  }, [agents, hoveredNode]);
-
-  // Handle canvas mouse hover
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = networkCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const radius = Math.min(width, height) * 0.38;
-
-    let foundId: string | null = null;
-    agents.forEach((agent, idx) => {
-      const angle = (idx / agents.length) * Math.PI * 2 - Math.PI / 2;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      if (Math.hypot(mouseX - x, mouseY - y) < 22) {
-        foundId = agent.id;
-      }
-    });
-
-    setHoveredNode(foundId);
-  };
-
-  const handleCanvasClick = () => {
-    if (hoveredNode) {
-      onSelectAgent(hoveredNode);
-    }
-  };
+  }, [agents, hoveredNode, onSelectAgent]);
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 p-6 space-y-6 text-slate-100">
-      {/* Top Welcome & KPI Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800">
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>小镇社会态势全景与演化仪表盘</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-              Live Analytics
-            </span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            实时捕获居民间的情感纽带、性格分布、冲突指数与云端持久化分析
-          </p>
-        </div>
+    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 text-[#f8f2e7] max-w-7xl mx-auto">
+      {/* 1. Cozy Town Chronicle Header Banner */}
+      <div className="relative game-panel-highlight p-6 overflow-hidden">
+        {/* Dreamy ambient light sphere */}
+        <div className="absolute -right-12 -top-12 w-64 h-64 bg-gradient-to-br from-[#ffb86b]/20 to-[#9d8cff]/20 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={onOpenFineTuningExport}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition"
-          >
-            <Database className="w-3.5 h-3.5 text-blue-400" />
-            <span>导出模型微调集 (JSONL)</span>
-          </button>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#ffb86b]/20 text-[#ffc97a] border border-[#ffb86b]/35 flex items-center gap-1.5 shadow-xs">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Town Chronicle</span>
+              </span>
+              <span className="text-xs text-[#c9c5d1]">小镇纪事与生命体态势</span>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-[#f8f2e7]">
+              艾瑟利亚小镇演化全景
+            </h2>
+            <p className="text-xs text-[#c9c5d1] mt-1 max-w-xl leading-relaxed">
+              这里是自治居民的日常剧场。居民在此自主工作、烘焙香气漫溢、草药在微风中摇曳，人际羁绊与心灵记忆正生生不息地演化着。
+            </p>
+          </div>
 
-          <button
-            onClick={() => onNavigateToTab('analyzer')}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-medium shadow-md shadow-blue-900/30 transition"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>AI 深度冲突分析</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                onNavigateToTab('canvas');
+              }}
+              className="game-btn-primary px-4 py-2 rounded-xl text-xs flex items-center gap-2"
+            >
+              <Compass className="w-4 h-4" />
+              <span>进入小镇地图</span>
+            </button>
+
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                onOpenFineTuningExport();
+              }}
+              className="game-btn-secondary px-3.5 py-2 rounded-xl text-xs flex items-center gap-2"
+            >
+              <Scroll className="w-4 h-4 text-[#ffc97a]" />
+              <span>导出物语日志</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* 2. Cozy Game HUD Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1 */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+        {/* Metric 1: Happiness Heart */}
+        <div className="game-panel p-5 relative overflow-hidden group hover:border-[#ffb86b]/40 transition-all duration-300">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">自主社交交互总量</span>
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <span className="text-xs font-semibold text-[#c9c5d1]">小镇幸福度</span>
+            <div className="p-2 rounded-xl bg-[#ff9ec4]/15 text-[#ff9ec4] border border-[#ff9ec4]/30 shadow-xs">
+              <Heart className="w-4 h-4 fill-[#ff9ec4]/40" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-bold font-mono text-[#fff1d6] tracking-tight">
+              {avgMood}
+            </span>
+            <span className="text-xs text-[#8f93a8] font-mono">/ 100</span>
+          </div>
+          <div className="w-full bg-[#1e2a47] rounded-full h-2 mt-3 overflow-hidden p-0.5 border border-[#344672]/30">
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-[#f28cb1] via-[#ffb86b] to-[#71c68b] transition-all duration-500 shadow-xs" 
+              style={{ width: `${Math.max(5, Math.min(100, avgMood))}%` }} 
+            />
+          </div>
+          <p className="text-[11px] text-[#71c68b] mt-2 flex items-center gap-1 font-medium">
+            <Smile className="w-3.5 h-3.5" />
+            <span>居民生活怡然自得</span>
+          </p>
+        </div>
+
+        {/* Metric 2: Social Interactions */}
+        <div className="game-panel p-5 relative overflow-hidden group hover:border-[#73c7e8]/40 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#c9c5d1]">交流与心声记录</span>
+            <div className="p-2 rounded-xl bg-[#73c7e8]/15 text-[#73c7e8] border border-[#73c7e8]/30 shadow-xs">
               <MessageSquare className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-white tracking-tight">
+            <span className="text-3xl font-bold font-mono text-[#fff1d6] tracking-tight">
               {totalInteractions}
             </span>
-            <span className="text-[11px] text-emerald-400 flex items-center font-medium">
-              <ArrowUpRight className="w-3 h-3" /> 持续演化中
+            <span className="text-xs text-[#71c68b] flex items-center font-medium">
+              <ArrowUpRight className="w-3.5 h-3.5" /> 自主演进
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            积极对话 {positiveInteractions} 场 · 争辩 {conflictInteractions} 场
+          <p className="text-[11px] text-[#c9c5d1] mt-2.5">
+            温情对话 <strong className="text-[#71c68b]">{positiveInteractions}</strong> 场 · 观点交锋 <strong className="text-[#f7a76c]">{conflictInteractions}</strong> 场
           </p>
         </div>
 
-        {/* KPI 2 */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+        {/* Metric 3: Economic Wealth */}
+        <div className="game-panel p-5 relative overflow-hidden group hover:border-[#ffc97a]/40 transition-all duration-300">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">小镇幸福感指数</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <HeartHandshake className="w-4 h-4" />
+            <span className="text-xs font-semibold text-[#c9c5d1]">小镇居民总财富</span>
+            <div className="p-2 rounded-xl bg-[#ffc97a]/15 text-[#ffc97a] border border-[#ffc97a]/30 shadow-xs">
+              <Coins className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className={`text-2xl font-bold font-mono tracking-tight ${avgMood >= 60 ? 'text-emerald-400' : avgMood >= 40 ? 'text-amber-400' : 'text-rose-400'}`}>
-              {avgMood}
+            <span className="text-3xl font-bold font-mono text-[#ffc97a] tracking-tight">
+              {totalWealth}
             </span>
-            <span className="text-xs text-slate-400 font-mono">/ 100</span>
+            <span className="text-xs text-[#c9c5d1]">金币</span>
           </div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all duration-500 ${avgMood >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
-              style={{ width: `${Math.max(5, Math.min(100, avgMood))}%` }} 
-            />
-          </div>
+          <p className="text-[11px] text-[#c9c5d1] mt-2.5 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#71c68b]" />
+            <span>集市流通繁荣 · 物价平稳</span>
+          </p>
         </div>
 
-        {/* KPI 3 */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+        {/* Metric 4: Cloud Sync Status */}
+        <div className="game-panel p-5 relative overflow-hidden group hover:border-[#9d8cff]/40 transition-all duration-300">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">社会张力与冲突指数</span>
-            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
-              <AlertTriangle className="w-4 h-4" />
+            <span className="text-xs font-semibold text-[#c9c5d1]">小镇世界状态</span>
+            <div className="p-2 rounded-xl bg-[#9d8cff]/15 text-[#b9a6ff] border border-[#9d8cff]/30 shadow-xs">
+              <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-white tracking-tight">
-              {conflictIndex}%
+            <span className="text-3xl font-bold font-mono text-[#fff1d6] tracking-tight">
+              {agents.length}
             </span>
-            <span className={`text-[11px] font-medium ${conflictIndex > 40 ? 'text-rose-400' : 'text-slate-400'}`}>
-              {conflictIndex > 50 ? '需市政干预' : conflictIndex > 25 ? '正常碰撞' : '极人和睦'}
-            </span>
+            <span className="text-xs text-[#c9c5d1]">位常住居民</span>
           </div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all duration-500 ${conflictIndex > 40 ? 'bg-rose-500' : 'bg-blue-500'}`} 
-              style={{ width: `${conflictIndex}%` }} 
-            />
-          </div>
-        </div>
-
-        {/* KPI 4 */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">云端持久化状态</span>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              <Database className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-white tracking-tight">
-              {totalInteractions + agents.length}
-            </span>
-            <span className="text-xs text-slate-400">条集合</span>
-          </div>
-          <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1 font-mono">
-            <CheckCircle2 className="w-3 h-3" /> Firestore 实时双向同步
+          <p className="text-[11px] text-[#91d69d] mt-2.5 flex items-center gap-1 font-mono">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#71c68b]" />
+            <span>云端 Firestore 记忆持久化</span>
           </p>
         </div>
       </div>
 
-      {/* Main Grid: Social Network Graph & AI Brief */}
+      {/* 3. Main Grid: Constellation Social Graph & Town Hotspots */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Social Relationship Force Network Graph (2 Cols) */}
-        <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        {/* Constellation Social Graph (2 Cols) */}
+        <div className="lg:col-span-2 game-panel p-5 flex flex-col">
+          <div className="flex items-center justify-between pb-3.5 border-b border-[#344672]/30">
             <div>
-              <h3 className="font-semibold text-sm text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-400" />
-                <span>居民人际关系与社会引力网络图</span>
+              <h3 className="font-bold text-sm text-[#f8f2e7] flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#ffc97a]" />
+                <span>星宿人际引力图 (Constellation Social Map)</span>
               </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                实线代表正向情感互信，虚线代表观念分歧摩擦；悬停可查看居民
+              <p className="text-[11px] text-[#c9c5d1] mt-0.5">
+                居民如同星辰依社交引力相连。连线展现情感色彩，点击星宿节点可查阅居民详卷。
               </p>
             </div>
 
-            <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-0.5 bg-blue-400 rounded" />
-                <span>友好信任</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-0.5 bg-rose-400 rounded" />
-                <span>理念分歧</span>
-              </div>
+            {/* Constellation Legend */}
+            <div className="hidden sm:flex items-center gap-3 text-[11px] text-[#c9c5d1]">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#65d6c4]" /> 挚友
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ff9ec4]" /> 依恋
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#f7a76c]" /> 竞争
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" /> 摩擦
+              </span>
             </div>
           </div>
 
           {/* Network Canvas */}
-          <div className="relative flex-1 min-h-[340px] mt-2 cursor-pointer">
+          <div className="relative w-full h-80 my-2 rounded-2xl overflow-hidden bg-[#151e33] border border-[#2d3d63]/50">
             <canvas
               ref={networkCanvasRef}
-              onMouseMove={handleCanvasMouseMove}
-              onClick={handleCanvasClick}
-              className="w-full h-full"
+              className="w-full h-full cursor-pointer block"
             />
 
-            {hoveredNode && (
-              <div className="absolute bottom-3 right-3 bg-slate-950/90 border border-slate-700/80 rounded-xl px-3 py-2 text-xs shadow-xl pointer-events-none">
-                <div className="font-semibold text-white">
-                  {agents.find(a => a.id === hoveredNode)?.name}
-                </div>
-                <div className="text-[11px] text-slate-400">
-                  {agents.find(a => a.id === hoveredNode)?.role}
-                </div>
-                <div className="text-[10px] text-blue-400 mt-0.5">
-                  点击查看个人详细演变轨迹 ➔
-                </div>
-              </div>
-            )}
+            <div className="absolute bottom-2.5 right-3 text-[10px] text-[#8f93a8] font-mono">
+              ✦ 点击星宿查看居民
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-between text-xs text-[#c9c5d1]">
+            <span>当前共缔结 <strong className="text-[#fff1d6]">{agents.length * (agents.length - 1) / 2}</strong> 条潜在人际共鸣线</span>
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                onNavigateToTab('evolution');
+              }}
+              className="text-[#ffc97a] hover:text-[#fff1d6] font-semibold text-xs transition"
+            >
+              查看更详细的羁绊网络 →
+            </button>
           </div>
         </div>
 
-        {/* AI Analyzer Executive Brief Card (1 Col) */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+        {/* Town Hotspots & Favorite Locations (1 Col) */}
+        <div className="game-panel p-5 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-semibold text-sm text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                <span>AI 小镇态势研判简报</span>
-              </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">
-                Gemini 3.8
-              </span>
-            </div>
+            <h3 className="font-bold text-sm text-[#f8f2e7] flex items-center gap-2 pb-3 border-b border-[#344672]/30">
+              <Building2 className="w-4 h-4 text-[#71c68b]" />
+              <span>最受青睐的小镇地标</span>
+            </h3>
 
-            {latestAnalysis ? (
-              <div className="mt-4 space-y-4">
-                <div>
-                  <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                    小镇心理气候
-                  </span>
-                  <p className="text-xs text-slate-200 font-medium mt-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
-                    {latestAnalysis.emotionalVibe}
-                  </p>
-                </div>
-
-                <div>
-                  <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                    核心冲突前沿 ({latestAnalysis.coreConflicts?.length || 0})
-                  </span>
-                  <div className="mt-1 space-y-2 max-h-[140px] overflow-y-auto pr-1">
-                    {latestAnalysis.coreConflicts?.map((conflict, i) => (
-                      <div key={i} className="p-2.5 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs">
-                        <div className="flex items-center justify-between text-rose-300 font-semibold">
-                          <span>{conflict.title}</span>
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20">
-                            烈度 {conflict.intensity}%
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-                          {conflict.description}
-                        </p>
+            <div className="space-y-3 mt-4">
+              {buildings.slice(0, 5).map(b => {
+                const count = locationCounts[b.name] || locationCounts[b.id] || 0;
+                return (
+                  <div
+                    key={b.id}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      onSelectBuilding(b.id);
+                    }}
+                    className="p-3 rounded-2xl bg-[#202b46]/70 hover:bg-[#273552] border border-[#344672]/30 hover:border-[#ffc97a]/40 transition cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#2d3d63] flex items-center justify-center text-base shrink-0 border border-white/10">
+                        {b.icon || '🏡'}
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                    结成同盟圈层
-                  </span>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {latestAnalysis.alliances?.map((alliance, i) => (
-                      <span
-                        key={i}
-                        className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[11px] font-medium"
-                      >
-                        {alliance.name} ({alliance.members.join(' · ')})
+                      <div>
+                        <h4 className="font-bold text-xs text-[#f8f2e7]">{b.name}</h4>
+                        <p className="text-[10px] text-[#c9c5d1] line-clamp-1">{b.description}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-2">
+                      <span className="text-xs font-mono font-bold text-[#ffc97a]">
+                        {count} 次
                       </span>
-                    ))}
+                      <p className="text-[9px] text-[#8f93a8]">居民驻足</p>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-center text-slate-500 text-xs">
-                正在汇总小镇近期演化数据...
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
 
-          <button
-            onClick={() => onNavigateToTab('analyzer')}
-            className="w-full mt-4 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 text-center transition flex items-center justify-center gap-1.5"
-          >
-            <span>进入 AI 分析器完整报告</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="pt-4 border-t border-[#344672]/30 mt-4">
+            <div className="p-3 rounded-xl bg-[#202b46]/50 text-xs text-[#c9c5d1] flex items-center justify-between">
+              <span>发现你感兴趣的建筑？</span>
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  onNavigateToTab('canvas');
+                }}
+                className="text-[#ffc97a] hover:text-[#fff1d6] font-semibold text-xs"
+              >
+                前往小镇勘查
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Bottom Section: Location Traffic & Recent Dialogue Snippets */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Location Hotspots */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm">
-          <h3 className="font-semibold text-sm text-white flex items-center gap-2 pb-3 border-b border-slate-800">
-            <Building2 className="w-4 h-4 text-amber-400" />
-            <span>小镇建筑人流与社交活跃度</span>
-          </h3>
-
-          <div className="mt-4 space-y-3">
-            {buildings.map(b => {
-              const count = locationCounts[b.name] || 0;
-              const maxCount = Math.max(1, ...Object.values(locationCounts));
-              const pct = Math.round((count / maxCount) * 100);
-
-              return (
-                <div 
-                  key={b.id} 
-                  onClick={() => onSelectBuilding(b.id)}
-                  className="group cursor-pointer p-2 rounded-xl hover:bg-slate-800/60 transition"
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-200 group-hover:text-blue-400 transition flex items-center gap-1.5">
-                      <span>{b.icon}</span>
-                      <span>{b.name}</span>
-                    </span>
-                    <span className="font-mono text-slate-400 text-[11px]">
-                      {count} 次偶遇
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${Math.max(4, pct)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+      {/* 4. Town Chronicle Logbook (Recent Landmarked Interactions) */}
+      <div className="game-panel p-5">
+        <div className="flex items-center justify-between pb-3.5 border-b border-[#344672]/30 mb-4">
+          <div className="flex items-center gap-2">
+            <Scroll className="w-4 h-4 text-[#ffc97a]" />
+            <h3 className="font-bold text-sm text-[#f8f2e7]">小镇最新回响与物语</h3>
           </div>
+          <button
+            onClick={() => {
+              soundEngine.playClick();
+              onNavigateToTab('dialogues');
+            }}
+            className="text-xs text-[#ffc97a] hover:text-[#fff1d6] font-semibold transition"
+          >
+            浏览全部记录 ({interactions.length}) →
+          </button>
         </div>
 
-        {/* Big Five Average Profile Across Town */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm">
-          <h3 className="font-semibold text-sm text-white flex items-center gap-2 pb-3 border-b border-slate-800">
-            <Compass className="w-4 h-4 text-emerald-400" />
-            <span>居民大五人格（Big Five）群体均值</span>
-          </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {interactions.slice(0, 6).map(record => {
+            const agentA = agents.find(a => a.id === record.participants?.[0]);
+            const agentB = agents.find(a => a.id === record.participants?.[1]);
+            const titleNames = record.participantNames?.join(' ✦ ') || `${agentA?.name || '居民A'} ✦ ${agentB?.name || '居民B'}`;
 
-          <div className="mt-4 space-y-3.5">
-            {[
-              {
-                key: 'openness',
-                label: '开放性 (Openness)',
-                desc: '对新事物、知识与艺术的探索欲望',
-                val: Math.round(agents.reduce((a, b) => a + b.bigFive.openness, 0) / (agents.length || 1)),
-                color: 'from-blue-500 to-cyan-500'
-              },
-              {
-                key: 'conscientiousness',
-                label: '尽责性 (Conscientiousness)',
-                desc: '自律守序、计划执行与责任担当',
-                val: Math.round(agents.reduce((a, b) => a + b.bigFive.conscientiousness, 0) / (agents.length || 1)),
-                color: 'from-emerald-500 to-teal-500'
-              },
-              {
-                key: 'extraversion',
-                label: '外向性 (Extraversion)',
-                desc: '热情善谈、主动社交与群体活力',
-                val: Math.round(agents.reduce((a, b) => a + b.bigFive.extraversion, 0) / (agents.length || 1)),
-                color: 'from-amber-500 to-orange-500'
-              },
-              {
-                key: 'agreeableness',
-                label: '宜人性 (Agreeableness)',
-                desc: '同理心、合作互助与善意信任',
-                val: Math.round(agents.reduce((a, b) => a + b.bigFive.agreeableness, 0) / (agents.length || 1)),
-                color: 'from-pink-500 to-rose-500'
-              },
-              {
-                key: 'neuroticism',
-                label: '情绪敏感度 (Neuroticism)',
-                desc: '压力耐受与环境波动的感知力',
-                val: Math.round(agents.reduce((a, b) => a + b.bigFive.neuroticism, 0) / (agents.length || 1)),
-                color: 'from-purple-500 to-indigo-500'
-              }
-            ].map(trait => (
-              <div key={trait.key} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-slate-300">{trait.label}</span>
-                  <span className="font-mono text-slate-200 font-semibold">{trait.val} / 100</span>
+            return (
+              <div
+                key={record.id}
+                className="p-3.5 rounded-2xl bg-[#202b46]/60 hover:bg-[#273552] border border-[#344672]/30 hover:border-[#ffc97a]/35 transition text-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-[#c9c5d1] mb-2">
+                    <span className="font-semibold text-[#ffc97a] flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      <span>{record.location}</span>
+                    </span>
+                    <span className="font-mono text-[10px] text-[#8f93a8]">
+                      第 {record.simDay} 天 · {record.simTime}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 font-bold text-xs text-[#f8f2e7] mb-1.5">
+                    <span>{titleNames}</span>
+                  </div>
+
+                  <p className="text-[11px] text-[#c9c5d1] line-clamp-2 italic leading-relaxed">
+                    "{record.summary}"
+                  </p>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className={`bg-gradient-to-r ${trait.color} h-full rounded-full`}
-                    style={{ width: `${trait.val}%` }}
-                  />
+
+                <div className="mt-3 pt-2 border-t border-[#344672]/20 flex items-center justify-between text-[10px]">
+                  <span className="px-2 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] font-medium">
+                    {record.topic || '闲谈生活'}
+                  </span>
+                  <span className={record.sentiment === 'positive' ? 'text-[#71c68b]' : record.sentiment === 'conflict' ? 'text-[#f7a76c]' : 'text-[#73c7e8]'}>
+                    {record.sentiment === 'positive' ? '✨ 心意相通' : record.sentiment === 'conflict' ? '⚡ 思维碰撞' : '💬 寻常交谈'}
+                  </span>
                 </div>
-                <p className="text-[10px] text-slate-500">{trait.desc}</p>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>

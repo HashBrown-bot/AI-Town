@@ -223,6 +223,23 @@ export default function App() {
   // Reflection active status
   const [isReflectingAgentId, setIsReflectingAgentId] = useState<string | null>(null);
 
+  // Floating RPG Game Toasts Feedback System
+  const [gameToasts, setGameToasts] = useState<{ id: string; badge: string; text: string; icon: string; color: string }[]>([]);
+
+  const addGameToast = useCallback((badge: string, text: string, icon = '✨', color = '#ffc97a') => {
+    const newToast = {
+      id: `${Date.now()}-${Math.random()}`,
+      badge,
+      text,
+      icon,
+      color
+    };
+    setGameToasts(prev => [newToast, ...prev].slice(0, 4));
+    setTimeout(() => {
+      setGameToasts(prev => prev.filter(t => t.id !== newToast.id));
+    }, 4000);
+  }, []);
+
   // Ref to track interacting agent IDs to prevent double encounters
   const interactingAgentIdsRef = useRef<Set<string>>(new Set());
 
@@ -887,6 +904,7 @@ export default function App() {
       // Async Persistent Save to Firebase Firestore!
       syncInteractionToCloud(newRecord);
       setCloudSyncCount(c => c + 1);
+      addGameToast('❤️ +5 羁绊提升', `${agentA.name} 与 ${agentB.name} 触碰了彼此心声`, '❤️', '#f28cb1');
 
     } catch (err) {
       console.error('Encounter execution error:', err);
@@ -912,6 +930,7 @@ export default function App() {
           if (a.id === agentId) {
             const updated = applyReflectionToAgent(a, reflectionResult, simDay, timeStr);
             syncAgentStateToCloud(updated);
+            addGameToast('✨ 顿悟新记忆', `${target.name} 领悟了新的长期心智认知`, '🌟', '#ffc97a');
             return updated;
           }
           return a;
@@ -952,6 +971,7 @@ export default function App() {
   const handleTriggerEvent = (event: TownEvent, agentReactions: any[]) => {
     setEvents(prev => [event, ...prev]);
     syncEventToCloud(event);
+    addGameToast('⚡ 奇遇降临', `【${event.title}】正在席卷小镇！`, '⚡', '#f7a76c');
 
     // Apply mood/stress updates to agents
     setAgents(prev =>
@@ -1022,6 +1042,7 @@ export default function App() {
   // 6. Knowledge System Handlers
   const handleInjectKnowledge = (newKnowledge: AgentKnowledge) => {
     setKnowledgeItems(prev => [newKnowledge, ...prev]);
+    addGameToast('💡 闻获新传闻', `【${newKnowledge.subject}】开始在小镇蔓延`, '💡', '#73c7e8');
   };
 
   const handleDebunkRumor = (knowledgeId: string, debunkNote: string) => {
@@ -1091,8 +1112,16 @@ export default function App() {
   const selectedAgentObj = agents.find(a => a.id === selectedAgentId) || null;
   const selectedBuildingObj = buildings.find(b => b.id === selectedBuildingId) || null;
 
+  const getEnvironmentAtmosphere = () => {
+    if (weather === 'rainy') return 'bg-[#151d30]';
+    if (weather === 'starry_night' || simHour >= 20 || simHour < 5) return 'bg-[#131a2e]';
+    if (simHour >= 5 && simHour < 8) return 'bg-[#1a233b]';
+    if (simHour >= 17 && simHour < 20) return 'bg-[#1f1c36]';
+    return 'bg-[#151d33]';
+  };
+
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
+    <div className={`flex flex-col h-screen w-screen overflow-hidden font-sans text-[#f8f2e7] transition-colors duration-700 ${getEnvironmentAtmosphere()}`}>
       {/* Top Global Navigation Bar */}
       <HeaderNav
         currentTab={currentTab}
@@ -1266,6 +1295,22 @@ export default function App() {
             }}
           />
         )}
+
+        {/* Floating RPG Game Feedback Toasts */}
+        <div className="fixed top-16 right-6 z-50 pointer-events-none space-y-2.5 max-w-sm">
+          {gameToasts.map(toast => (
+            <div
+              key={toast.id}
+              className="pointer-events-auto game-panel-highlight px-4 py-2.5 shadow-2xl flex items-center gap-3 animate-fadeIn border border-[#ffc97a]/40"
+            >
+              <span className="text-xl shrink-0">{toast.icon}</span>
+              <div className="text-xs">
+                <div className="font-bold text-[#ffc97a] tracking-wide text-xs">{toast.badge}</div>
+                <div className="text-[#f8f2e7] text-[11px] leading-snug mt-0.5">{toast.text}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
 
       {/* Model Fine-Tuning Exporter Modal */}

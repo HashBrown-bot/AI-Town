@@ -8,14 +8,18 @@ import {
   Footprints, 
   ChevronDown, 
   ChevronUp, 
-  Activity, 
   Heart, 
-  Brain, 
+  Zap, 
   Users, 
-  Lightbulb,
-  Sparkles,
-  Zap,
-  Coins
+  Sparkles, 
+  Brain, 
+  Shield, 
+  Star, 
+  Coins, 
+  Compass, 
+  BookOpen,
+  Sword,
+  Handshake
 } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
@@ -34,59 +38,51 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   onGoToEvolution,
   onForceInteraction
 }) => {
-  const [showAllScores, setShowAllScores] = useState<boolean>(false);
-  const [needsViewMode, setNeedsViewMode] = useState<'four_dimensions' | 'compact'>('four_dimensions');
+  const [activeTab, setActiveTab] = useState<'vitals' | 'relations' | 'memories'>('vitals');
 
   if (!agent) return null;
 
   const currentAction = agent.plan?.steps[agent.plan.currentStepIndex] || agent.currentAction;
   const currentGoal = agent.goal;
 
-  // Resolve structured needs with graceful fallback
-  const physical = agent.physicalNeeds || {
-    energy: agent.needs?.energy ?? agent.state?.energy ?? 80,
-    hunger: agent.needs?.hunger ?? 20,
-    health: agent.needs?.health ?? 90,
-  };
+  // Resolve Vitals
+  const energy = agent.physicalNeeds?.energy ?? agent.needs?.energy ?? agent.state?.energy ?? 80;
+  const hunger = agent.physicalNeeds?.hunger ?? agent.needs?.hunger ?? 25;
+  const mood = agent.psychologicalNeeds?.mood ?? agent.needs?.mood ?? (agent.state?.mood < 0 ? (agent.state.mood + 100) / 2 : agent.state.mood) ?? 75;
+  const social = agent.socialNeeds?.social ?? agent.needs?.social ?? 60;
+  const curiosity = agent.cognitiveNeeds?.curiosity ?? agent.needs?.curiosity ?? 65;
+  const safety = agent.needs?.safety ?? 85;
+  const achievement = agent.cognitiveNeeds?.achievement ?? agent.needs?.achievement ?? 60;
 
-  const psychological = agent.psychologicalNeeds || {
-    mood: agent.needs?.mood ?? (agent.state?.mood < 0 ? (agent.state.mood + 100) / 2 : agent.state.mood) ?? 75,
-    stress: agent.needs?.stress ?? agent.state?.stress ?? 18,
-    fun: agent.needs?.fun ?? 55,
-    comfort: agent.needs?.comfort ?? 80,
-  };
-
-  const social = agent.socialNeeds || {
-    social: agent.needs?.social ?? agent.state?.sociability ?? 70,
-    belonging: agent.needs?.belonging ?? 75,
-  };
-
-  const cognitive = agent.cognitiveNeeds || {
-    curiosity: agent.needs?.curiosity ?? 65,
-    achievement: agent.needs?.achievement ?? 60,
-  };
-
-  const conditionTags = agent.activeConditionTags || [];
+  const vitals = [
+    { label: '心情', val: mood, icon: <Heart className="w-3.5 h-3.5 text-[#f28cb1]" />, color: 'from-[#f28cb1] to-[#ff9ec4]' },
+    { label: '精力', val: energy, icon: <Zap className="w-3.5 h-3.5 text-[#ffc97a]" />, color: 'from-[#ffb86b] to-[#ffc97a]' },
+    { label: '饱腹', val: 100 - hunger, icon: <span className="text-xs">🍞</span>, color: 'from-[#f7a76c] to-[#ffb86b]' },
+    { label: '社交', val: social, icon: <Users className="w-3.5 h-3.5 text-[#73c7e8]" />, color: 'from-[#73c7e8] to-[#65d6c4]' },
+    { label: '好奇', val: curiosity, icon: <Brain className="w-3.5 h-3.5 text-[#b9a6ff]" />, color: 'from-[#9d8cff] to-[#b9a6ff]' },
+    { label: '安全', val: safety, icon: <Shield className="w-3.5 h-3.5 text-[#71c68b]" />, color: 'from-[#71c68b] to-[#91d69d]' },
+    { label: '成就', val: achievement, icon: <Star className="w-3.5 h-3.5 text-[#ffc97a]" />, color: 'from-[#ffc97a] to-[#fff1d6]' }
+  ];
 
   return (
-    <div className="absolute top-16 left-6 z-20 w-96 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-5 shadow-2xl text-slate-100 animate-fadeIn max-h-[88vh] overflow-y-auto no-scrollbar">
-      {/* Header */}
-      <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+    <div className="absolute top-16 left-6 z-20 w-96 game-panel-highlight p-5 shadow-2xl text-[#f8f2e7] animate-fadeIn max-h-[88vh] overflow-y-auto no-scrollbar border border-[#ffc97a]/30">
+      {/* 1. RPG Character Header Banner */}
+      <div className="flex items-start justify-between pb-3.5 border-b border-[#344672]/30">
         <div className="flex items-center gap-3">
           <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-bold text-white shadow border border-white/20 shrink-0"
-            style={{ backgroundColor: agent.spriteColor || '#3b82f6' }}
+            className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-lg border-2 border-[#ffc97a]/40 shrink-0"
+            style={{ backgroundColor: agent.spriteColor || '#ffb86b' }}
           >
             {agent.name.slice(0, 1)}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm text-white">{agent.name}</h3>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30">
+              <h3 className="font-bold text-base text-[#f8f2e7]">{agent.name}</h3>
+              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-[#9d8cff]/20 text-[#b9a6ff] font-bold border border-[#9d8cff]/30">
                 {agent.mbti}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">{agent.role}</p>
+            <p className="text-xs text-[#ffc97a] font-medium mt-0.5">{agent.role}</p>
           </div>
         </div>
 
@@ -95,396 +91,199 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             soundEngine.playClick();
             onClose();
           }}
-          className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+          className="p-1.5 text-[#8f93a8] hover:text-[#f8f2e7] rounded-xl hover:bg-[#202b46] transition"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Autonomous Decision System Showcase (Needs -> Goal -> Plan -> Action) */}
-      <div className="py-3 space-y-3 text-xs">
-        {/* Active Condition Badges (Dynamic Linkages) */}
-        {conditionTags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {conditionTags.map((tag, idx) => (
-              <span 
-                key={idx} 
-                className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-950/80 text-indigo-300 border border-indigo-700/40 shadow-xs flex items-center gap-1"
-              >
-                <span>{tag}</span>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Active Goal & Utility AI Choice */}
-        {currentGoal && (
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/50 to-indigo-950/50 border border-blue-800/40 space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
-              <span className="flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-blue-400" />
-                <span>Utility AI 首选目标 (Top Goal)</span>
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
-                紧急度: {currentGoal.urgency}/10
-              </span>
-            </div>
-            <div className="text-slate-100 font-semibold text-xs leading-snug">
-              {currentGoal.title}
-            </div>
-            <div className="text-[11px] text-slate-300 pt-0.5 border-t border-blue-900/40">
-              <span className="text-indigo-400 font-semibold">【决策动机】: </span>
-              <span>{currentGoal.motivation}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Utility AI Candidate Actions Dashboard */}
-        {agent.utilityEvaluations && agent.utilityEvaluations.length > 0 && (
-          <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-indigo-950 space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">
-              <span>Utility AI 候选行为评估</span>
-              <button
-                onClick={() => setShowAllScores(!showAllScores)}
-                className="text-slate-400 hover:text-indigo-300 font-mono flex items-center gap-0.5 text-[9px] transition"
-              >
-                <span>{showAllScores ? '收起 (Top 3)' : `展开全部 (${agent.utilityEvaluations.length})`}</span>
-                {showAllScores ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              </button>
-            </div>
-            <div className="space-y-1 max-h-48 overflow-y-auto no-scrollbar">
-              {(showAllScores ? agent.utilityEvaluations : agent.utilityEvaluations.slice(0, 3)).map((u, i) => (
-                <div key={u.action} className="text-[11px] py-1 border-b border-slate-900/60 last:border-b-0">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <span>{u.icon}</span>
-                      <span className="font-medium">{u.label}</span>
-                      {i === 0 && <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-mono">首选</span>}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-slate-800 rounded-full h-1 overflow-hidden">
-                        <div className={`h-full ${i === 0 ? 'bg-amber-400' : 'bg-indigo-400'}`} style={{ width: `${u.score}%` }} />
-                      </div>
-                      <span className="font-mono text-[10px] text-slate-300 w-6 text-right font-bold">{u.score}</span>
-                    </div>
-                  </div>
-                  {showAllScores && (
-                    <div className="text-[9px] text-slate-400 font-mono pt-0.5 px-0.5 leading-tight">
-                      <div className="text-slate-300 truncate">{u.reason}</div>
-                      <div className="text-slate-500">基础:{u.factors.needScore} · 特质:×{u.factors.personalityModifier} · 目标:×{u.factors.goalModifier} · 社交:×{u.factors.relationshipModifier} · 环境:×{u.factors.environmentModifier}</div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Current Executing Action & Progress */}
-        <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              <Footprints className="w-3.5 h-3.5 text-emerald-400" />
-              <span>当前执行计划 (Plan Step {agent.plan ? `${agent.plan.currentStepIndex + 1}/${agent.plan.totalSteps}` : '1/1'})</span>
-            </span>
-            <span className="font-mono text-emerald-400 font-bold">
-              {currentAction?.progress || 0}%
-            </span>
-          </div>
-
-          <div className="text-slate-200 font-medium leading-relaxed">
-            {currentAction?.description || agent.currentActivity}
-          </div>
-
-          {/* Progress bar */}
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-emerald-400 h-full rounded-full transition-all duration-300"
-              style={{ width: `${currentAction?.progress || 0}%` }}
-            />
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center gap-1 pt-0.5">
-            <span>{building?.icon || '📍'}</span>
-            <span>位于: {building?.name || '小镇街巷'}</span>
-          </div>
+      {/* 2. Character Economy & Vital Coin Pouch */}
+      <div className="py-3 flex items-center justify-between px-3 rounded-2xl bg-[#17223b]/70 border border-[#344672]/40 text-xs">
+        <div className="flex items-center gap-2">
+          <Coins className="w-4 h-4 text-[#ffc97a]" />
+          <span className="text-[#c9c5d1]">随身金币:</span>
+          <span className="font-bold font-mono text-[#ffc97a] text-sm">{agent.money ?? 150}</span>
         </div>
-
-        {/* Inner Thought */}
-        <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-300 italic">
-          "{agent.currentThought}"
-        </div>
-
-        {/* 4-Dimension Needs & Psychological State System */}
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-            <span className="flex items-center gap-1 text-slate-300">
-              <Activity className="w-3 h-3 text-indigo-400" />
-              <span>居民四维需求与心理系统</span>
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setNeedsViewMode(needsViewMode === 'four_dimensions' ? 'compact' : 'four_dimensions')}
-                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-              >
-                {needsViewMode === 'four_dimensions' ? '简略视图' : '四维矩阵'}
-              </button>
-            </div>
-          </div>
-
-          {needsViewMode === 'compact' ? (
-            /* Compact Mode (4 Primary Meters) */
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
-                <div className="flex justify-between text-slate-400">
-                  <span>⚡ 精力 (Energy)</span>
-                  <span className="text-amber-400 font-bold">{Math.round(physical.energy)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-amber-400 h-full" style={{ width: `${physical.energy}%` }} />
-                </div>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
-                <div className="flex justify-between text-slate-400">
-                  <span>🍞 饥饿 (Hunger)</span>
-                  <span className="text-orange-400 font-bold">{Math.round(physical.hunger)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-orange-400 h-full" style={{ width: `${physical.hunger}%` }} />
-                </div>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
-                <div className="flex justify-between text-slate-400">
-                  <span>💬 社交 (Social)</span>
-                  <span className="text-blue-400 font-bold">{Math.round(social.social)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-blue-400 h-full" style={{ width: `${social.social}%` }} />
-                </div>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
-                <div className="flex justify-between text-slate-400">
-                  <span>🔍 求知 (Curiosity)</span>
-                  <span className="text-purple-400 font-bold">{Math.round(cognitive.curiosity)}%</span>
-                </div>
-                <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-purple-400 h-full" style={{ width: `${cognitive.curiosity}%` }} />
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* 4-Dimension Rich Matrix View */
-            <div className="space-y-2 text-[10px]">
-              {/* 1. Physical Needs */}
-              <div className="p-2 rounded-xl bg-slate-950/60 border border-amber-950/40 space-y-1.5">
-                <div className="flex items-center justify-between text-amber-400 font-semibold">
-                  <span className="flex items-center gap-1">
-                    <Heart className="w-3 h-3 text-amber-400" />
-                    <span>生理状态 (Physical)</span>
-                  </span>
-                  <span className="text-[9px] text-slate-400">健康联动</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 font-mono">
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>⚡精力</span>
-                      <span className="text-amber-400 font-bold">{Math.round(physical.energy)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-amber-400 h-full" style={{ width: `${physical.energy}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>🍞饥饿</span>
-                      <span className="text-orange-400 font-bold">{Math.round(physical.hunger)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-orange-400 h-full" style={{ width: `${physical.hunger}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>🌿健康</span>
-                      <span className="text-emerald-400 font-bold">{Math.round(physical.health)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-emerald-400 h-full" style={{ width: `${physical.health}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Psychological Needs */}
-              <div className="p-2 rounded-xl bg-slate-950/60 border border-rose-950/40 space-y-1.5">
-                <div className="flex items-center justify-between text-rose-400 font-semibold">
-                  <span className="flex items-center gap-1">
-                    <Brain className="w-3 h-3 text-rose-400" />
-                    <span>心理状态 (Psychological)</span>
-                  </span>
-                  <span className="text-[9px] text-slate-400">情绪与压力</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 font-mono">
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>😊心情</span>
-                      <span className="text-emerald-300 font-bold">{Math.round(psychological.mood)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-emerald-400 h-full" style={{ width: `${psychological.mood}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>⚠️压力</span>
-                      <span className={`font-bold ${psychological.stress > 50 ? 'text-rose-400' : 'text-slate-300'}`}>{Math.round(psychological.stress)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className={`h-full ${psychological.stress > 50 ? 'bg-rose-500' : 'bg-blue-400'}`} style={{ width: `${psychological.stress}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>🎪趣味</span>
-                      <span className="text-pink-400 font-bold">{Math.round(psychological.fun)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-pink-400 h-full" style={{ width: `${psychological.fun}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between text-slate-400">
-                      <span>🛋️舒适</span>
-                      <span className="text-teal-400 font-bold">{Math.round(psychological.comfort)}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <div className="bg-teal-400 h-full" style={{ width: `${psychological.comfort}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Social & Cognitive Needs */}
-              <div className="grid grid-cols-2 gap-2">
-                {/* Social Needs */}
-                <div className="p-2 rounded-xl bg-slate-950/60 border border-blue-950/40 space-y-1.5">
-                  <div className="flex items-center justify-between text-blue-400 font-semibold">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3 h-3 text-blue-400" />
-                      <span>社交 (Social)</span>
-                    </span>
-                  </div>
-                  <div className="space-y-1 font-mono">
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between text-slate-400">
-                        <span>💬社交充实</span>
-                        <span className="text-blue-400 font-bold">{Math.round(social.social)}</span>
-                      </div>
-                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                        <div className="bg-blue-400 h-full" style={{ width: `${social.social}%` }} />
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between text-slate-400">
-                        <span>🤝归属认同</span>
-                        <span className="text-cyan-400 font-bold">{Math.round(social.belonging)}</span>
-                      </div>
-                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                        <div className="bg-cyan-400 h-full" style={{ width: `${social.belonging}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cognitive Needs */}
-                <div className="p-2 rounded-xl bg-slate-950/60 border border-purple-950/40 space-y-1.5">
-                  <div className="flex items-center justify-between text-purple-400 font-semibold">
-                    <span className="flex items-center gap-1">
-                      <Lightbulb className="w-3 h-3 text-purple-400" />
-                      <span>认知 (Cognitive)</span>
-                    </span>
-                  </div>
-                  <div className="space-y-1 font-mono">
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between text-slate-400">
-                        <span>🔍求知探索</span>
-                        <span className="text-purple-400 font-bold">{Math.round(cognitive.curiosity)}</span>
-                      </div>
-                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                        <div className="bg-purple-400 h-full" style={{ width: `${cognitive.curiosity}%` }} />
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between text-slate-400">
-                        <span>🏆胜任成就</span>
-                        <span className="text-indigo-400 font-bold">{Math.round(cognitive.achievement)}</span>
-                      </div>
-                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                        <div className="bg-indigo-400 h-full" style={{ width: `${cognitive.achievement}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Economic Profile & Personal Wealth */}
-        <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
-              <Coins className="w-3.5 h-3.5" />
-              <span>个人财富与职业经济</span>
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-medium">
-              {agent.economicStatus === 'wealthy' ? '小康富足' :
-               agent.economicStatus === 'comfortable' ? '自给自足' :
-               agent.economicStatus === 'frugal' ? '精打细算' : '手头拮据'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800 text-center font-mono text-xs">
-            <div>
-              <span className="text-[10px] text-slate-500 block">资金储备</span>
-              <span className="text-amber-300 font-bold font-mono">{agent.money ?? 0} 🌟</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block">工位薪酬</span>
-              <span className="text-emerald-400 font-bold font-mono">+{agent.salary || 30} 🌟</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block">累计消费</span>
-              <span className="text-rose-400 font-bold font-mono">-{agent.expenses ?? 0} 🌟</span>
-            </div>
-          </div>
+        <div className="h-3 w-px bg-[#344672]/40" />
+        <div className="text-[11px] text-[#c9c5d1]">
+          <span>日薪: </span>
+          <strong className="text-[#f8f2e7]">{agent.salary ?? 32} 金币</strong>
         </div>
       </div>
 
-      {/* Footer Buttons */}
-      <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+      {/* 3. Current Quest / Goal Banner */}
+      {currentGoal && (
+        <div className="my-3 p-3 rounded-2xl bg-gradient-to-r from-[#202b46] to-[#273552] border border-[#ffc97a]/25 space-y-1.5 shadow-xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-[#ffc97a] uppercase tracking-wider">
+            <span className="flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5" />
+              <span>当前主要目标 (Quest Goal)</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-[#ffb86b]/20 text-[#fff1d6] font-mono text-[9px]">
+              紧急度: {currentGoal.urgency}/10
+            </span>
+          </div>
+          <div className="text-[#f8f2e7] font-semibold text-xs leading-snug">
+            {currentGoal.title}
+          </div>
+          <p className="text-[11px] text-[#c9c5d1] pt-1 border-t border-[#344672]/20">
+            <span className="text-[#7ce1cf] font-medium">心念动机: </span>
+            <span>{currentGoal.motivation}</span>
+          </p>
+        </div>
+      )}
+
+      {/* 4. Tab Navigation for Sheet */}
+      <div className="flex items-center gap-1 p-1 bg-[#17223b]/60 rounded-xl my-3 border border-[#344672]/30">
         <button
-          onClick={() => onForceInteraction(agent.id)}
-          className="flex-1 py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 text-center transition flex items-center justify-center gap-1.5"
+          onClick={() => {
+            soundEngine.playClick();
+            setActiveTab('vitals');
+          }}
+          className={`flex-1 py-1 text-xs font-semibold rounded-lg transition ${
+            activeTab === 'vitals'
+              ? 'bg-[#273552] text-[#fff1d6] shadow-xs border border-[#ffc97a]/30'
+              : 'text-[#8f93a8] hover:text-[#f8f2e7]'
+          }`}
         >
-          <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-          <span>促成社交交谈</span>
+          状态维生
+        </button>
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            setActiveTab('relations');
+          }}
+          className={`flex-1 py-1 text-xs font-semibold rounded-lg transition ${
+            activeTab === 'relations'
+              ? 'bg-[#273552] text-[#fff1d6] shadow-xs border border-[#ffc97a]/30'
+              : 'text-[#8f93a8] hover:text-[#f8f2e7]'
+          }`}
+        >
+          人际羁绊
+        </button>
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            setActiveTab('memories');
+          }}
+          className={`flex-1 py-1 text-xs font-semibold rounded-lg transition ${
+            activeTab === 'memories'
+              ? 'bg-[#273552] text-[#fff1d6] shadow-xs border border-[#ffc97a]/30'
+              : 'text-[#8f93a8] hover:text-[#f8f2e7]'
+          }`}
+        >
+          物语记忆
+        </button>
+      </div>
+
+      {/* Tab 1: 7-Attributes RPG Vitals */}
+      {activeTab === 'vitals' && (
+        <div className="space-y-2.5 my-2">
+          {vitals.map(v => (
+            <div key={v.label} className="text-xs">
+              <div className="flex items-center justify-between mb-1">
+                <span className="flex items-center gap-1.5 text-[#c9c5d1] font-medium">
+                  {v.icon}
+                  <span>{v.label}</span>
+                </span>
+                <span className="font-mono font-bold text-[#f8f2e7]">{Math.round(v.val)}/100</span>
+              </div>
+              <div className="w-full bg-[#17223b] rounded-full h-2 overflow-hidden border border-[#344672]/30 p-0.5">
+                <div
+                  className={`h-full rounded-full bg-gradient-to-r ${v.color} transition-all duration-300`}
+                  style={{ width: `${Math.max(4, Math.min(100, v.val))}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tab 2: Multi-Dimensional Relationships */}
+      {activeTab === 'relations' && (
+        <div className="space-y-2.5 my-2">
+          {agent.relationships && Object.entries(agent.relationships).length > 0 ? (
+            Object.entries(agent.relationships).map(([targetId, rel]) => (
+              <div key={targetId} className="p-2.5 rounded-xl bg-[#17223b]/60 border border-[#344672]/30 text-xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-[#f8f2e7]">{rel.targetAgentName}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/20">
+                    {rel.relationshipStage === 'close_friend' ? '✨ 挚友' : rel.relationshipStage === 'partner' ? '💖 伴侣' : rel.relationshipStage === 'rival' ? '⚔️ 竞争' : '🤝 寻常之交'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[10px] text-[#c9c5d1] pt-1 border-t border-[#344672]/20">
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3 h-3 text-[#ff9ec4]" />
+                    <span>好感: {rel.affection}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Handshake className="w-3 h-3 text-[#7ce1cf]" />
+                    <span>信任: {rel.trust}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Star className="w-3 h-3 text-[#ffc97a]" />
+                    <span>尊重: {rel.respect}</span>
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-3 text-center text-xs text-[#8f93a8]">
+              暂无已觉醒的多维人际数据
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: RPG Adventure Memories */}
+      {activeTab === 'memories' && (
+        <div className="space-y-2 my-2 max-h-56 overflow-y-auto no-scrollbar">
+          {agent.memories && agent.memories.length > 0 ? (
+            agent.memories.slice(0, 5).map((mem, idx) => (
+              <div
+                key={idx}
+                className="p-2.5 rounded-xl bg-[#17223b]/60 border border-[#344672]/30 text-xs"
+              >
+                <div className="flex items-center justify-between text-[10px] text-[#ffc97a] mb-1 font-mono">
+                  <span>🌟 记忆碎片 #{idx + 1}</span>
+                  <span className="text-[#8f93a8]">深度 {mem.importance || 7}/10</span>
+                </div>
+                <p className="text-[11px] text-[#f8f2e7] leading-relaxed">
+                  "{mem.content}"
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="p-3 text-center text-xs text-[#8f93a8]">
+              居民正在编织新记忆
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 5. Quick Actions */}
+      <div className="pt-3 border-t border-[#344672]/30 flex items-center gap-2">
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onForceInteraction(agent.id);
+          }}
+          className="game-btn-primary flex-1 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5"
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>发起邂逅交流</span>
         </button>
 
         <button
-          onClick={() => onGoToEvolution(agent.id)}
-          className="flex-1 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition flex items-center justify-center gap-1.5 shadow"
+          onClick={() => {
+            soundEngine.playClick();
+            onGoToEvolution(agent.id);
+          }}
+          className="game-btn-secondary px-3 py-2 rounded-xl text-xs flex items-center gap-1"
+          title="前往行为演变详卷"
         >
-          <TrendingUp className="w-3.5 h-3.5" />
-          <span>四维演化与记忆全貌</span>
+          <TrendingUp className="w-3.5 h-3.5 text-[#ffc97a]" />
+          <span>详卷</span>
         </button>
       </div>
     </div>

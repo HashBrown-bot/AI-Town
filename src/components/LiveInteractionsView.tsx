@@ -91,51 +91,51 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 p-6 space-y-6 text-slate-100">
+    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 text-[#f8f2e7] max-w-7xl mx-auto">
       {/* View Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#344672]/30">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>居民实时交互与情感交流日志</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-              Live Stream
+          <h2 className="text-xl font-bold text-[#f8f2e7] tracking-tight flex items-center gap-2">
+            <span>小镇心声与实时交谈实录</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/30 font-mono">
+              Live Encounters
             </span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#c9c5d1] mt-1">
             追踪居民间的自主交谈实录、情感微表情、话题演化及好感度流动轨迹
           </p>
         </div>
 
         <button
           onClick={onOpenFineTuningExport}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-medium shadow-md shadow-blue-900/30 transition self-start md:self-auto"
+          className="game-btn-secondary px-4 py-2 rounded-xl text-xs flex items-center gap-2 self-start md:self-auto"
         >
-          <Download className="w-3.5 h-3.5" />
-          <span>导出微调训练数据集 (JSONL)</span>
+          <Download className="w-3.5 h-3.5 text-[#ffc97a]" />
+          <span>导出物语训练集 (JSONL)</span>
         </button>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-3">
+      <div className="flex flex-wrap items-center gap-3 game-panel p-3.5">
         {/* Search Input */}
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#8f93a8] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="搜索话题、居民姓名或偶遇地点..."
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+            className="w-full bg-[#17223b] border border-[#344672]/40 rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#f8f2e7] placeholder-[#8f93a8] focus:outline-none focus:border-[#ffc97a]/50 transition"
           />
         </div>
 
         {/* Agent Filter */}
         <div className="flex items-center gap-1.5">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
+          <Filter className="w-3.5 h-3.5 text-[#8f93a8]" />
           <select
             value={selectedAgentFilter}
             onChange={e => setSelectedAgentFilter(e.target.value)}
-            className="bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
+            className="bg-[#17223b] border border-[#344672]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#f8f2e7] focus:outline-none focus:border-[#ffc97a]/50 transition"
           >
             <option value="all">所有居民</option>
             {agents.map(a => (
@@ -149,7 +149,7 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
           <select
             value={selectedSentimentFilter}
             onChange={e => setSelectedSentimentFilter(e.target.value)}
-            className="bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
+            className="bg-[#17223b] border border-[#344672]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#f8f2e7] focus:outline-none focus:border-[#ffc97a]/50 transition"
           >
             <option value="all">全部情感基调</option>
             <option value="positive">和睦温馨</option>
@@ -177,38 +177,38 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
             return (
               <div
                 key={record.id}
-                className="bg-slate-900/90 border border-slate-800/90 hover:border-slate-700/80 rounded-2xl overflow-hidden transition shadow-sm"
+                className="game-panel overflow-hidden transition hover:border-[#ffc97a]/40 shadow-sm"
               >
                 {/* Collapsed Header / Summary Card */}
                 <div
                   onClick={() => setExpandedId(isExpanded ? null : record.id)}
-                  className="p-4 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/60 hover:bg-slate-800/40 transition"
+                  className="p-4 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#202b46]/50 hover:bg-[#273552]/60 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                      <MessageSquare className="w-4 h-4 text-blue-400" />
+                    <div className="w-10 h-10 rounded-xl bg-[#2a385c] border border-white/10 flex items-center justify-center shrink-0">
+                      <MessageSquare className="w-4 h-4 text-[#ffc97a]" />
                     </div>
 
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm text-white">
+                        <span className="font-bold text-sm text-[#f8f2e7]">
                           {record.topic}
                         </span>
                         {getSentimentBadge(record.sentiment)}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1">
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-[#c9c5d1] mt-1">
                         <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-500" />
+                          <MapPin className="w-3 h-3 text-[#ffc97a]" />
                           <span>{record.location}</span>
                         </span>
                         <span>·</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock className="w-3 h-3 text-[#8f93a8]" />
                           <span>第 {record.simDay} 天 {record.simTime}</span>
                         </span>
                         <span>·</span>
-                        <span className="text-blue-300 font-medium">
+                        <span className="text-[#fff1d6] font-semibold">
                           {record.participantNames.join(' 与 ')}
                         </span>
                       </div>
