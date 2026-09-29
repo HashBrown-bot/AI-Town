@@ -73,5 +73,14 @@ service cloud.firestore {
         && request.resource.data.content is string;
       allow delete: if false;
     }
+
+    // Town Economy System Collection
+    match /town_economy/{economyId} {
+      allow read: if isValidId(economyId);
+      allow create, update: if isValidId(economyId)
+        && request.resource.data.id is string
+        && request.resource.data.totalMoneySupply is number;
+      allow delete: if false;
+    }
   }
 }

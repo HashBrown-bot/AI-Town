@@ -6,7 +6,8 @@ import {
   TownEvent, 
   TownAnalysis, 
   ActiveInteractionBubble,
-  AgentKnowledge 
+  AgentKnowledge,
+  TownEconomyState
 } from './types/town';
 import { 
   INITIAL_AGENTS, 
@@ -26,6 +27,7 @@ import { TownAnalyzerView } from './components/TownAnalyzerView';
 import { AgentDetailModal } from './components/AgentDetailModal';
 import { FineTuningExportModal } from './components/FineTuningExportModal';
 import { QuotaCapacityPanel } from './components/QuotaCapacityPanel';
+import { TownEconomyPanel } from './components/TownEconomyPanel';
 import { 
   testConnection, 
   syncInteractionToCloud, 
@@ -37,7 +39,9 @@ import {
   fetchCloudInteractions,
   fetchCloudAgents,
   fetchCloudEvents,
-  fetchCloudAnalysis
+  fetchCloudAnalysis,
+  syncEconomyStateToCloud,
+  fetchCloudEconomyState
 } from './services/firebase';
 import { requestAgentDialogue, requestAgentReflection } from './services/aiTownService';
 import { 
@@ -47,6 +51,7 @@ import {
   applyReflectionToAgent 
 } from './services/memorySystem';
 import { tickAgentAutonomousBehavior, applyDialogueOutcomeToNeeds } from './systems';
+import { initializeTownEconomy, tickTownEconomy } from './systems/EconomySystem';
 import { updateRelationshipOnInteraction, calculateAffinityProjection, createDefaultRelationship } from './systems/RelationshipSystem';
 import { 
   INITIAL_TOWN_KNOWLEDGE, 
@@ -61,6 +66,7 @@ const STORAGE_AGENTS = 'aetheria_agents_v2';
 const STORAGE_INTERACTIONS = 'aetheria_interactions_v2';
 const STORAGE_EVENTS = 'aetheria_events_v2';
 const STORAGE_KNOWLEDGE = 'aetheria_knowledge_v2';
+const STORAGE_ECONOMY = 'aetheria_economy_v2';
 
 function loadStoredSimState() {
   console.group('[Aetheria 调试日志] 1. loadStoredSimState: 开始加载本地存储状态');
@@ -104,6 +110,12 @@ function loadStoredAgents(): Agent[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((agent: any) => ({
           ...agent,
+          money: typeof agent.money === 'number' ? agent.money : 150,
+          income: typeof agent.income === 'number' ? agent.income : 0,
+          expenses: typeof agent.expenses === 'number' ? agent.expenses : 0,
+          occupation: agent.occupation || agent.role || '居民',
+          salary: typeof agent.salary === 'number' ? agent.salary : 32,
+          economicStatus: agent.economicStatus || 'comfortable',
           needs: agent.needs || {
             energy: agent.state?.energy || 80,
             hunger: 25,
@@ -123,6 +135,21 @@ function loadStoredAgents(): Agent[] {
     console.warn('Failed to load local agents:', err);
   }
   return INITIAL_AGENTS;
+}
+
+function loadStoredEconomy(): TownEconomyState {
+  try {
+    const item = localStorage.getItem(STORAGE_ECONOMY);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (parsed && Array.isArray(parsed.shops)) {
+        return initializeTownEconomy(parsed);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load local economy:', err);
+  }
+  return initializeTownEconomy();
 }
 
 function loadStoredInteractions(): InteractionRecord[] | null {
@@ -170,6 +197,16 @@ export default function App() {
   const [events, setEvents] = useState<TownEvent[]>(INITIAL_EVENTS);
   const [latestAnalysis, setLatestAnalysis] = useState<TownAnalysis>(INITIAL_ANALYSIS);
   const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>(loadStoredKnowledge);
+  const [economyState, setEconomyState] = useState<TownEconomyState>(loadStoredEconomy);
+
+  // Sync economy state to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_ECONOMY, JSON.stringify(economyState));
+    } catch (e) {
+      // ignore
+    }
+  }, [economyState]);
 
   // Active Conversations on Canvas
   const [activeBubbles, setActiveBubbles] = useState<ActiveInteractionBubble[]>([]);
@@ -376,6 +413,18 @@ export default function App() {
         } catch (e) {
           console.warn('Could not fetch cloud analysis:', e);
         }
+
+        // 6. Fetch persistent economy state from Cloud
+        try {
+          const cloudEconomy = await fetchCloudEconomyState();
+          if (cloudEconomy && Array.isArray(cloudEconomy.shops) && cloudEconomy.shops.length > 0) {
+            setEconomyState(initializeTownEconomy(cloudEconomy));
+          } else {
+            syncEconomyStateToCloud(initializeTownEconomy());
+          }
+        } catch (e) {
+          console.warn('Could not fetch cloud economy state:', e);
+        }
       } else {
         // If offline and no interactions, seed initial
         if (interactions.length === 0) {
@@ -490,12 +539,27 @@ export default function App() {
         return nextMin;
       });
 
+      // Economy tick: update dynamic pricing & store inventories
+      setEconomyState(prevEcon => {
+        const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
+        const { updatedEconomy } = tickTownEconomy(
+          prevEcon,
+          agents,
+          buildings,
+          simHour,
+          simMinute,
+          simDay,
+          timeStr
+        );
+        return updatedEconomy;
+      });
+
       // Advance agent autonomous movement & check proximity encounters
       updateAgentsStep();
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [simSpeed, buildings]);
+  }, [simSpeed, buildings, agents, simHour, simMinute, simDay]);
 
   // Agent Step & Autonomous Behavior Cycle (Needs -> Goal -> Plan -> Action)
   const updateAgentsStep = useCallback(() => {
@@ -1094,6 +1158,29 @@ export default function App() {
             }}
             onNavigateToTab={setCurrentTab}
             onOpenFineTuningExport={() => setIsExportModalOpen(true)}
+          />
+        )}
+
+        {currentTab === 'economy' && (
+          <TownEconomyPanel
+            economyState={economyState}
+            agents={agents}
+            buildings={buildings}
+            simDay={simDay}
+            simHour={simHour}
+            simMinute={simMinute}
+            simTime={`${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`}
+            onUpdateEconomy={(updatedEconomy, updatedAgents, newTx) => {
+              setEconomyState(updatedEconomy);
+              setAgents(updatedAgents);
+              if (newTx) {
+                syncEconomyStateToCloud(updatedEconomy);
+              }
+            }}
+            onAddTownEvent={(event) => {
+              setEvents(prev => [event, ...prev]);
+              syncEventToCloud(event);
+            }}
           />
         )}
 

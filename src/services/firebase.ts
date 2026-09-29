@@ -12,7 +12,7 @@ import {
   limit 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { InteractionRecord, Agent, TownEvent, TownAnalysis, AgentKnowledge } from '../types/town';
+import { InteractionRecord, Agent, TownEvent, TownAnalysis, AgentKnowledge, TownEconomyState, EconomicTransaction } from '../types/town';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -119,6 +119,12 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
       currentGoal: agent.goal?.title || agent.currentGoal || '',
       currentAction: agent.currentAction?.description || '',
       location: agent.currentBuildingId,
+      money: typeof agent.money === 'number' ? agent.money : 100,
+      income: typeof agent.income === 'number' ? agent.income : 0,
+      expenses: typeof agent.expenses === 'number' ? agent.expenses : 0,
+      occupation: agent.occupation || agent.role,
+      salary: typeof agent.salary === 'number' ? agent.salary : 30,
+      economicStatus: agent.economicStatus || 'comfortable',
       updatedAt: Date.now()
     }, { merge: true });
     recordFirestoreWrite();
@@ -316,6 +322,45 @@ export async function fetchCloudKnowledge(): Promise<AgentKnowledge[]> {
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'town_knowledge');
     return [];
+  }
+}
+
+// Sync global town economy state to Firestore
+export async function syncEconomyStateToCloud(economy: TownEconomyState): Promise<boolean> {
+  const path = 'town_economy/current';
+  try {
+    await setDoc(doc(db, 'town_economy', 'current'), {
+      id: 'current',
+      totalMoneySupply: economy.totalMoneySupply,
+      totalResidentWealth: economy.totalResidentWealth,
+      totalShopRevenue: economy.totalShopRevenue,
+      averagePriceIndex: economy.averagePriceIndex,
+      municipalFund: economy.municipalFund,
+      shops: economy.shops,
+      products: economy.products,
+      recentTransactions: economy.recentTransactions.slice(0, 30),
+      activeEconomicEvents: economy.activeEconomicEvents,
+      updatedAt: Date.now()
+    }, { merge: true });
+    recordFirestoreWrite();
+    return true;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return false;
+  }
+}
+
+// Fetch town economy state from Firestore
+export async function fetchCloudEconomyState(): Promise<TownEconomyState | null> {
+  try {
+    const snapshot = await getDocs(collection(db, 'town_economy'));
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data() as TownEconomyState;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'town_economy/current');
+    return null;
   }
 }
 

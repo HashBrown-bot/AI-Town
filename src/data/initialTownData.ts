@@ -18,7 +18,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#38bdf8',
     icon: '🏛️',
     entranceX: 560,
-    entranceY: 245
+    entranceY: 245,
+    operatingCost: 35
   },
   {
     id: 'library',
@@ -34,7 +35,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#818cf8',
     icon: '📚',
     entranceX: 250,
-    entranceY: 255
+    entranceY: 255,
+    operatingCost: 20
   },
   {
     id: 'cafe',
@@ -50,7 +52,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#f59e0b',
     icon: '☕',
     entranceX: 845,
-    entranceY: 255
+    entranceY: 255,
+    operatingCost: 18
   },
   {
     id: 'bakery',
@@ -66,7 +69,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#fb923c',
     icon: '🥐',
     entranceX: 245,
-    entranceY: 525
+    entranceY: 525,
+    operatingCost: 22
   },
   {
     id: 'central_park',
@@ -82,7 +86,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#34d399',
     icon: '⛲',
     entranceX: 560,
-    entranceY: 460
+    entranceY: 460,
+    operatingCost: 10
   },
   {
     id: 'clinic',
@@ -98,7 +103,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#2dd4bf',
     icon: '🌿',
     entranceX: 845,
-    entranceY: 525
+    entranceY: 525,
+    operatingCost: 25
   },
   {
     id: 'observatory',
@@ -114,7 +120,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#a855f7',
     icon: '🔭',
     entranceX: 270,
-    entranceY: 815
+    entranceY: 815,
+    operatingCost: 30
   },
   {
     id: 'cottages',
@@ -130,7 +137,8 @@ export const INITIAL_BUILDINGS: Building[] = [
     accentColor: '#f43f5e',
     icon: '🏡',
     entranceX: 830,
-    entranceY: 815
+    entranceY: 815,
+    operatingCost: 15
   }
 ];
 
@@ -189,6 +197,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-6': 15,
       'agent-7': 50
     },
+    money: 280,
+    income: 140,
+    expenses: 50,
+    occupation: '咖啡馆主理人',
+    salary: 38,
+    economicStatus: 'wealthy',
     memories: [
       {
         id: 'mem-101',
@@ -305,6 +319,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-6': 20,
       'agent-7': -5
     },
+    money: 210,
+    income: 105,
+    expenses: 40,
+    occupation: '典籍考据学者',
+    salary: 35,
+    economicStatus: 'comfortable',
     memories: [
       {
         id: 'mem-201',
@@ -419,6 +439,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-6': 10,
       'agent-7': 65
     },
+    money: 190,
+    income: 120,
+    expenses: 65,
+    occupation: '暖阳烘焙主理',
+    salary: 32,
+    economicStatus: 'comfortable',
     memories: [
       {
         id: 'mem-301',
@@ -533,6 +559,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-6': 40,
       'agent-7': 60
     },
+    money: 320,
+    income: 160,
+    expenses: 55,
+    occupation: '草药医师',
+    salary: 40,
+    economicStatus: 'wealthy',
     memories: [
       {
         id: 'mem-401',
@@ -647,6 +679,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-6': -10,
       'agent-7': 30
     },
+    money: 140,
+    income: 110,
+    expenses: 85,
+    occupation: '发条机械发明家',
+    salary: 36,
+    economicStatus: 'comfortable',
     memories: [
       {
         id: 'mem-501',
@@ -761,6 +799,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-5': -10,
       'agent-7': -20
     },
+    money: 350,
+    income: 180,
+    expenses: 45,
+    occupation: '市政事务秘书长',
+    salary: 45,
+    economicStatus: 'wealthy',
     memories: [
       {
         id: 'mem-601',
@@ -875,6 +919,12 @@ const RAW_INITIAL_AGENTS: Agent[] = [
       'agent-5': 30,
       'agent-6': -20
     },
+    money: 75,
+    income: 50,
+    expenses: 42,
+    occupation: '游吟诗人与写生画匠',
+    salary: 25,
+    economicStatus: 'frugal',
     memories: [
       {
         id: 'mem-701',
@@ -1111,11 +1161,19 @@ export const INITIAL_AGENTS: Agent[] = RAW_INITIAL_AGENTS.map(agent => {
   return {
     ...agent,
     ...full,
+    money: typeof agent.money === 'number' ? agent.money : 150,
+    income: typeof agent.income === 'number' ? agent.income : 0,
+    expenses: typeof agent.expenses === 'number' ? agent.expenses : 0,
+    occupation: agent.occupation || agent.role,
+    salary: typeof agent.salary === 'number' ? agent.salary : 30,
+    economicStatus: agent.economicStatus || 'comfortable',
     relationships: baseRels,
     affinity: syncedAffinity,
     knowledge: getAgentPersonalKnowledge(agent.id, INITIAL_TOWN_KNOWLEDGE)
   };
 });
+
+export { INITIAL_PRODUCTS, INITIAL_SHOPS } from '../systems/EconomySystem';
 
 export const INITIAL_EVENTS: TownEvent[] = [
   {

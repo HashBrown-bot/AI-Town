@@ -271,6 +271,38 @@
         }
       },
       "required": ["id", "subject", "content", "infoType", "sourceType"]
+    },
+    "TownEconomyState": {
+      "title": "TownEconomyState",
+      "description": "Global town economy state, money supply, shop metrics, and market conditions.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier"
+        },
+        "totalMoneySupply": {
+          "type": "number",
+          "description": "Total circulating money in town"
+        },
+        "totalResidentWealth": {
+          "type": "number",
+          "description": "Total resident savings"
+        },
+        "totalShopRevenue": {
+          "type": "number",
+          "description": "Total commercial revenue"
+        },
+        "averagePriceIndex": {
+          "type": "number",
+          "description": "Consumer price index 0-200"
+        },
+        "municipalFund": {
+          "type": "number",
+          "description": "Municipal treasury reserve"
+        }
+      },
+      "required": ["id", "totalMoneySupply", "totalResidentWealth"]
     }
   },
   "firestore": {
@@ -309,6 +341,12 @@
         "$ref": "#/entities/AgentKnowledge"
       },
       "description": "Town knowledge, secrets, rumors and beliefs propagation network."
+    },
+    "/town_economy/{economyId}": {
+      "schema": {
+        "$ref": "#/entities/TownEconomyState"
+      },
+      "description": "Town economic balance, financial flows, shop revenues and commodity price index."
     }
   }
 }

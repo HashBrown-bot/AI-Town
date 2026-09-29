@@ -238,6 +238,14 @@ export interface Agent {
   knowledge?: AgentKnowledge[]; // 居民个体拥有的知识/情报库 (仅知悉亲眼所见、传闻或工作所得)
   moodHistory: { simTime: string; mood: number; stress: number }[];
   unreflectedMemoryCount?: number; // 距离上次反思积累的未消化记忆计数
+
+  // 基础经济系统 (Lightweight Economy System)
+  money: number;              // 个人储蓄资金（小镇货币单位：银星币 🌟）
+  income: number;             // 累计收入
+  expenses: number;           // 累计开销
+  occupation: string;         // 职业岗位标识 (关联现有角色)
+  salary: number;             // 每次专注工作发放的基础报酬
+  economicStatus?: 'wealthy' | 'comfortable' | 'frugal' | 'destitute'; // 经济状况评估
 }
 
 export type InformationType = 'knowledge' | 'secret' | 'rumor' | 'belief';
@@ -355,6 +363,7 @@ export interface Building {
   entranceX: number;
   entranceY: number;
   occupants?: string[];
+  operatingCost: number; // 日常运转维护消耗 (银星币/日)
 }
 
 export interface DialogueUtterance {
@@ -478,4 +487,100 @@ export interface ReflectionResult {
   moodDelta?: number;
   stressDelta?: number;
   evidenceMemoryIds?: string[];
+}
+
+// ==========================================
+// 经济系统定义 (Town Economy System Types)
+// ==========================================
+
+export type ProductId = 
+  | 'coffee'     // 星光手冲咖啡
+  | 'bread'      // 暖阳蜂蜜面包
+  | 'medicine'   // 宁神草药精油
+  | 'books'      // 珍本文献抄本
+  | 'materials'  // 铜制精密齿轮
+  | 'tools';     // 维保修理工具箱
+
+export interface ProductItem {
+  id: ProductId;
+  name: string;
+  category: 'drink' | 'food' | 'health' | 'culture' | 'craft';
+  description: string;
+  basePrice: number;     // 基准价格 (银星币)
+  currentPrice: number;  // 供需动态浮动后的现行价格
+  costPrice: number;     // 进货/研发物料成本
+  unit: string;          // 计量单位 (杯/个/瓶/册/枚/套)
+  targetBuildingId: string; // 主产/售卖建筑
+  satisfactionEffect: {
+    needType: keyof AgentNeeds;
+    value: number;       // 满足度效应 (正数增加需求/负数削减赤字)
+  }[];
+}
+
+export interface TownShop {
+  id: string;
+  name: string;
+  buildingId: string;
+  buildingName: string;
+  keeperAgentId: string;
+  keeperName: string;
+  productIds: ProductId[];
+  inventory: Record<string, number>; // productId -> 实时库存数
+  prices: Record<string, number>;    // productId -> 实时销售单价
+  revenue: number;                   // 累计销售营业额
+  expenses: number;                  // 累计采购与运营成本支出
+  cashReserve: number;               // 店铺公账资金储备
+  dailySalesCount: number;           // 今日售出商品件数
+}
+
+export type EconomicTransactionType = 
+  | 'purchase'        // 居民购买商品消费
+  | 'salary'          // 居民工位劳动取得报酬
+  | 'operating_cost'  // 建筑与店铺日常维护开销
+  | 'subsidy'         // 市政厅发放的民生/商户平抑补贴
+  | 'price_shift';    // 供应链波动引起的物价重估
+
+export interface EconomicTransaction {
+  id: string;
+  timestamp: number;
+  simDay: number;
+  simTime: string;
+  type: EconomicTransactionType;
+  agentId?: string;
+  agentName?: string;
+  shopId?: string;
+  shopName?: string;
+  productId?: ProductId;
+  productName?: string;
+  amount: number;       // 涉及金额
+  description: string;  // 交易详述
+}
+
+export interface EconomyEventRecord {
+  id: string;
+  title: string;
+  description: string;
+  type: 'shortage' | 'inflation' | 'subsidy' | 'boom' | 'recession';
+  targetShopId?: string;
+  targetProductId?: ProductId;
+  priceMultiplier: number;
+  inventoryImpact: number;
+  affectedMoodDelta: number;
+  affectedStressDelta: number;
+  simDay: number;
+  simTime: string;
+  active: boolean;
+}
+
+export interface TownEconomyState {
+  totalMoneySupply: number;    // 小镇资金流通总量 (M1)
+  totalResidentWealth: number; // 居民总持币量
+  totalShopRevenue: number;    // 商业总累计销售额
+  totalTransactions: number;   // 累计交易流水总额
+  averagePriceIndex: number;   // 综合物价消费指数 (以 100 为基准)
+  municipalFund: number;       // 市政财政公积金
+  shops: TownShop[];
+  products: ProductItem[];
+  recentTransactions: EconomicTransaction[];
+  activeEconomicEvents: EconomyEventRecord[];
 }

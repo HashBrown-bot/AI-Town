@@ -14,7 +14,8 @@ import {
   Users, 
   Lightbulb,
   Sparkles,
-  Zap
+  Zap,
+  Coins
 } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
@@ -435,6 +436,36 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Economic Profile & Personal Wealth */}
+        <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+              <Coins className="w-3.5 h-3.5" />
+              <span>个人财富与职业经济</span>
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-medium">
+              {agent.economicStatus === 'wealthy' ? '小康富足' :
+               agent.economicStatus === 'comfortable' ? '自给自足' :
+               agent.economicStatus === 'frugal' ? '精打细算' : '手头拮据'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800 text-center font-mono text-xs">
+            <div>
+              <span className="text-[10px] text-slate-500 block">资金储备</span>
+              <span className="text-amber-300 font-bold font-mono">{agent.money ?? 0} 🌟</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block">工位薪酬</span>
+              <span className="text-emerald-400 font-bold font-mono">+{agent.salary || 30} 🌟</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block">累计消费</span>
+              <span className="text-rose-400 font-bold font-mono">-{agent.expenses ?? 0} 🌟</span>
+            </div>
+          </div>
         </div>
       </div>
 

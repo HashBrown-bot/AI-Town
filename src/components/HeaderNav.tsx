@@ -18,13 +18,15 @@ import {
   Zap,
   BrainCircuit,
   Activity,
-  Radio
+  Radio,
+  Coins
 } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
 
 export type TabKey = 
   | 'canvas'
   | 'dashboard'
+  | 'economy'
   | 'dialogues'
   | 'evolution'
   | 'personas'
@@ -76,6 +78,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'canvas', label: '小镇全景', icon: <MapPin className="w-4 h-4" /> },
     { key: 'dashboard', label: '社会动态', icon: <BarChart3 className="w-4 h-4" /> },
+    { key: 'economy', label: '经济系统', icon: <Coins className="w-4 h-4 text-amber-400" /> },
     { key: 'dialogues', label: '交互与记录', icon: <MessageSquareText className="w-4 h-4" /> },
     { key: 'evolution', label: '行为演变', icon: <TrendingUp className="w-4 h-4" /> },
     { key: 'information', label: '情报与流言', icon: <Radio className="w-4 h-4 text-amber-400" /> },

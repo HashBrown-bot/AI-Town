@@ -169,6 +169,35 @@ export function tickAgentAutonomousBehavior(
     if (currentAction.progress >= 100) {
       currentAction.status = 'completed';
 
+      // 经济行为联动：工作完成发放薪资，饮食消费扣除开支
+      let agentMoney = agent.money ?? 100;
+      let agentIncome = agent.income ?? 0;
+      let agentExpenses = agent.expenses ?? 0;
+      let agentEconomicStatus = agent.economicStatus || 'comfortable';
+
+      if (currentAction.type === 'work_task') {
+        const earned = agent.salary || 30;
+        agentMoney = Math.min(9999, agentMoney + earned);
+        agentIncome += earned;
+        if (agentMoney >= 260) agentEconomicStatus = 'wealthy';
+        else if (agentMoney >= 120) agentEconomicStatus = 'comfortable';
+        else if (agentMoney >= 45) agentEconomicStatus = 'frugal';
+        else agentEconomicStatus = 'destitute';
+      } else if (currentAction.type === 'consume_food_drink') {
+        const cost = currentAction.targetBuildingId === 'bakery' ? 10 : 12;
+        if (agentMoney >= cost) {
+          agentMoney = Math.max(0, agentMoney - cost);
+          agentExpenses += cost;
+        }
+        if (agentMoney < 45) agentEconomicStatus = 'destitute';
+        else if (agentMoney < 120) agentEconomicStatus = 'frugal';
+      }
+
+      agent.money = agentMoney;
+      agent.income = agentIncome;
+      agent.expenses = agentExpenses;
+      agent.economicStatus = agentEconomicStatus;
+
       // Apply WORLD FEEDBACK to 4-dimension Needs
       if (currentAction.feedbackEffects) {
         const afterAction = applyActionEffectsToNeeds(

@@ -93,13 +93,20 @@ export function calculateNeedScore(
 
     case 'work': {
       // Driven by achievement, but throttled by low energy and excessive stress/hunger
+      // 经济驱动：当持币较低时，为了赚取薪资的工作迫切性显著上升
+      const currentMoney = agent?.money ?? 100;
       let base = cognitive.achievement * 0.95;
+      if (currentMoney < 50) {
+        base += Math.max(15, (50 - currentMoney) * 0.8); // 拮据迫使打工赚取薪水
+      } else if (currentMoney > 280) {
+        base *= 0.85; // 储蓄丰厚时略微放缓工作节奏
+      }
       if (physical.energy < 30) base *= 0.45;
       if (physical.hunger > 70) base *= 0.55;
       if (psychological.stress > 80) base *= 0.6;
       return {
         score: clampUtilityScore(base),
-        reason: `进取与成就动机 ${Math.round(cognitive.achievement)}% (受精力/饥饿约束调节)`
+        reason: `进取动机 ${Math.round(cognitive.achievement)}% (储蓄: ${Math.round(currentMoney)} 🌟，受薪酬需求加权)`
       };
     }
 
@@ -145,11 +152,20 @@ export function calculateNeedScore(
 
     case 'shop': {
       // Commerce and coffee/pastry leisure: hunger + fun + comfort
+      // 经济购买力调节：资金匮乏时大幅削减非必要消费；资金充裕时消费意愿激增
       const comfortDeficit = Math.max(0, 100 - psychological.comfort);
-      const score = physical.hunger * 0.45 + comfortDeficit * 0.35 + psychological.fun * 0.3;
+      let score = physical.hunger * 0.45 + comfortDeficit * 0.35 + psychological.fun * 0.3;
+      const currentMoney = agent?.money ?? 100;
+      if (currentMoney < 20) {
+        score *= 0.22; // 极度拮据，抑制消费转向忍耐
+      } else if (currentMoney < 50) {
+        score *= 0.65; // 精打细算，审慎消费
+      } else if (currentMoney >= 220) {
+        score *= 1.25; // 消费宽裕，乐于品尝新品
+      }
       return {
         score: clampUtilityScore(score),
-        reason: `小憩采买欲与放松心愿`
+        reason: `小憩采买心愿 (资金储蓄: ${Math.round(currentMoney)} 🌟，受可支配收入调节)`
       };
     }
 
