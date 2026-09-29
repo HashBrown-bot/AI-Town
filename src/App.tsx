@@ -243,6 +243,60 @@ export default function App() {
   // Debounce ref for syncing simulation clock to cloud
   const lastCloudClockSyncRef = useRef<number>(0);
 
+  // High-efficiency mutable references for the requestAnimationFrame controller
+  const simClockRef = useRef({
+    day: initialSim.simDay,
+    hour: initialSim.simHour,
+    minute: initialSim.simMinute,
+  });
+
+  const agentsRef = useRef<Agent[]>(agents);
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+
+  // Keep simClockRef synced if time is set externally (e.g. skip hour or reset)
+  useEffect(() => {
+    simClockRef.current = { day: simDay, hour: simHour, minute: simMinute };
+  }, [simDay, simHour, simMinute]);
+
+  const simStateRef = useRef({
+    simSpeed,
+    simDay,
+    simHour,
+    simMinute,
+    weather,
+    buildings,
+    events,
+    activeBubbles,
+  });
+
+  // Keep simStateRef synchronized with current state on every render
+  useEffect(() => {
+    simStateRef.current = {
+      simSpeed,
+      simDay,
+      simHour,
+      simMinute,
+      weather,
+      buildings,
+      events,
+      activeBubbles,
+    };
+  });
+
+  // Track active speech intervals and timers to guarantee zero memory buildup on unmount
+  const activeTimersRef = useRef<Set<any>>(new Set());
+  useEffect(() => {
+    return () => {
+      activeTimersRef.current.forEach(timer => {
+        clearInterval(timer);
+        clearTimeout(timer);
+      });
+      activeTimersRef.current.clear();
+    };
+  }, []);
+
   // 1. Persist clock and weather immediately to LocalStorage and debounced to Firestore
   useEffect(() => {
     localStorage.setItem(STORAGE_SIM_STATE, JSON.stringify({ simDay, simHour, simMinute, weather }));
@@ -470,79 +524,31 @@ export default function App() {
   };
 
   // Evening reflection: at 22:00, pick an agent with memories to synthesize daily reflection
-  const triggerEveningReflection = () => {
+  const triggerEveningReflection = useCallback(() => {
     setAgents(currentAgents => {
       const candidates = currentAgents.filter(a => (a.memories || []).length >= 3);
       if (candidates.length > 0) {
         const picked = candidates[Math.floor(Math.random() * candidates.length)];
-        setTimeout(() => handleTriggerAgentReflection(picked.id), 1200);
+        const timer = setTimeout(() => {
+          activeTimersRef.current.delete(timer);
+          handleTriggerAgentReflection(picked.id);
+        }, 1200);
+        activeTimersRef.current.add(timer);
       }
       return currentAgents;
     });
-  };
-
-  // 2. Main Simulation Tick Loop (Advances clock & agent movement)
-  useEffect(() => {
-    if (simSpeed === 0) return;
-
-    const intervalTime = 1000 / simSpeed;
-    const timer = setInterval(() => {
-      logger.recordMetric('simulationTicks', 1);
-      // Advance clock
-      setSimMinute(prevMin => {
-        let nextMin = prevMin + 5;
-        if (nextMin >= 60) {
-          nextMin = 0;
-          setSimHour(prevHour => {
-            let nextHour = prevHour + 1;
-            if (nextHour >= 24) {
-              nextHour = 0;
-              setSimDay(d => d + 1);
-            }
-            // Auto update weather based on time of day
-            if (nextHour === 6) setWeather('misty_morning');
-            else if (nextHour === 12) setWeather('clear');
-            else if (nextHour === 18) setWeather('golden_sunset');
-            else if (nextHour === 21) setWeather('starry_night');
-
-            // Trigger evening daily reflection check at 22:00
-            if (nextHour === 22) {
-              triggerEveningReflection();
-            }
-
-            return nextHour;
-          });
-        }
-        return nextMin;
-      });
-
-      // Economy tick: update dynamic pricing & store inventories
-      setEconomyState(prevEcon => {
-        const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
-        const { updatedEconomy } = tickTownEconomy(
-          prevEcon,
-          agents,
-          buildings,
-          simHour,
-          simMinute,
-          simDay,
-          timeStr
-        );
-        return updatedEconomy;
-      });
-
-      // Advance agent autonomous movement & check proximity encounters
-      updateAgentsStep();
-    }, intervalTime);
-
-    return () => clearInterval(timer);
-  }, [simSpeed, buildings, agents, simHour, simMinute, simDay]);
+  }, []);
 
   // Agent Step & Autonomous Behavior Cycle (Needs -> Goal -> Plan -> Action)
-  const updateAgentsStep = useCallback(() => {
+  // Refactored to operate synchronously with memoized callback, avoiding closure re-creations
+  const updateAgentsStep = useCallback((stepDay?: number, stepHour?: number, stepMin?: number) => {
+    const curDay = stepDay ?? simClockRef.current.day;
+    const curHour = stepHour ?? simClockRef.current.hour;
+    const curMin = stepMin ?? simClockRef.current.minute;
+    const timeStr = `${String(curHour).padStart(2, '0')}:${String(curMin).padStart(2, '0')}`;
+    const { buildings, weather, events, activeBubbles } = simStateRef.current;
+
     setAgents(prevAgents => {
-      const timeStr = `${String(simHour).padStart(2, '0')}:${String(simMinute).padStart(2, '0')}`;
-      
       const updated = prevAgents.map(agent => {
         const isInteracting = interactingAgentIdsRef.current.has(agent.id);
         return tickAgentAutonomousBehavior(
@@ -550,13 +556,15 @@ export default function App() {
           1, // 1 simulation minute per tick
           buildings,
           prevAgents,
-          simDay,
+          curDay,
           timeStr,
           weather,
           isInteracting,
           events
         );
       });
+
+      agentsRef.current = updated;
 
       // Proximity encounter trigger: check if two agents are close (< 45px) and not chatting
       // Throttle autonomous dialogues to at least 15s apart so quota is preserved and simulation feels natural
@@ -585,7 +593,102 @@ export default function App() {
 
       return updated;
     });
-  }, [buildings, simHour, simMinute, simDay, weather, events]);
+  }, []);
+
+  // 2. Main Simulation Controller (Single requestAnimationFrame loop)
+  // Replaces multiple intervals with a high-efficiency RAF controller.
+  // Benefits:
+  // - 0% CPU consumption when browser tab is inactive/backgrounded (auto-throttled by browser)
+  // - Fixed timestep accumulator guarantees deterministic tick cadence
+  // - Clamping delta to 2000ms and capping substeps to 4 prevents "spiral of death" and memory buildup
+  // - Only restarts when simSpeed changes, eliminating timer churn and garbage collection spikes
+  useEffect(() => {
+    if (simSpeed === 0) return;
+
+    let rafId: number | null = null;
+    let lastTime: number = performance.now();
+    let accumulator: number = 0;
+    const intervalTime = 1000 / simSpeed;
+    const maxSubsteps = 4; // Prevent spiral of death when returning from background tabs
+
+    const loop = (currentTime: number) => {
+      // Calculate delta time, capping at 2000ms to avoid huge catch-up bursts if tab was hidden
+      const delta = Math.min(currentTime - lastTime, 2000);
+      lastTime = currentTime;
+      accumulator += delta;
+
+      let substeps = 0;
+      while (accumulator >= intervalTime && substeps < maxSubsteps) {
+        accumulator -= intervalTime;
+        substeps++;
+        logger.recordMetric('simulationTicks', 1);
+
+        // Advance simulation clock
+        simClockRef.current.minute += 5;
+        if (simClockRef.current.minute >= 60) {
+          simClockRef.current.minute = 0;
+          simClockRef.current.hour += 1;
+          if (simClockRef.current.hour >= 24) {
+            simClockRef.current.hour = 0;
+            simClockRef.current.day += 1;
+            setSimDay(simClockRef.current.day);
+          }
+          const curHour = simClockRef.current.hour;
+          setSimHour(curHour);
+
+          // Auto update weather based on time of day
+          if (curHour === 6) setWeather('misty_morning');
+          else if (curHour === 12) setWeather('clear');
+          else if (curHour === 18) setWeather('golden_sunset');
+          else if (curHour === 21) setWeather('starry_night');
+
+          // Trigger evening daily reflection check at 22:00
+          if (curHour === 22) {
+            triggerEveningReflection();
+          }
+        }
+        setSimMinute(simClockRef.current.minute);
+
+        const curDay = simClockRef.current.day;
+        const curHour = simClockRef.current.hour;
+        const curMin = simClockRef.current.minute;
+        const timeStr = `${String(curHour).padStart(2, '0')}:${String(curMin).padStart(2, '0')}`;
+
+        // Economy tick: update dynamic pricing & store inventories
+        const { buildings } = simStateRef.current;
+        setEconomyState(prevEcon => {
+          const { updatedEconomy } = tickTownEconomy(
+            prevEcon,
+            agentsRef.current,
+            buildings,
+            curHour,
+            curMin,
+            curDay,
+            timeStr
+          );
+          return updatedEconomy;
+        });
+
+        // Advance agent autonomous movement & check proximity encounters
+        updateAgentsStep(curDay, curHour, curMin);
+      }
+
+      // If maxSubsteps reached, drop remainder to prevent accumulator lag
+      if (substeps >= maxSubsteps) {
+        accumulator = 0;
+      }
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [simSpeed, updateAgentsStep, triggerEveningReflection]);
 
   // 3. Trigger Autonomous Dialogue between two agents
   const triggerAutonomousDialogue = async (agentA: Agent, agentB: Agent) => {
@@ -682,15 +785,19 @@ export default function App() {
         } else {
           // Finished conversation
           clearInterval(speechInterval);
+          activeTimersRef.current.delete(speechInterval);
 
           // Remove bubble after a short pause
-          setTimeout(() => {
+          const cleanupTimer = setTimeout(() => {
+            activeTimersRef.current.delete(cleanupTimer);
             setActiveBubbles(prev => prev.filter(b => b.id !== bubbleId));
             interactingAgentIdsRef.current.delete(agentA.id);
             interactingAgentIdsRef.current.delete(agentB.id);
           }, 2000);
+          activeTimersRef.current.add(cleanupTimer);
         }
       }, 2500);
+      activeTimersRef.current.add(speechInterval);
 
       // Construct complete InteractionRecord
       // 2. Compute Multi-Dimensional Relationship 2.0 Bilateral Evolution
@@ -1037,14 +1144,17 @@ export default function App() {
 
   // Skip one hour shortcut
   const handleSkipHour = () => {
-    setSimHour(prev => (prev + 1) % 24);
-    updateAgentsStep();
+    const nextH = (simClockRef.current.hour + 1) % 24;
+    simClockRef.current.hour = nextH;
+    setSimHour(nextH);
+    updateAgentsStep(simClockRef.current.day, nextH, simClockRef.current.minute);
     soundEngine.playClick();
   };
 
   // Reset simulation time to Day 1
   const handleResetSimulation = () => {
     if (window.confirm('确定要将小镇时间重置回到第 1 天吗？现有居民档案与交互历史仍将保留。')) {
+      simClockRef.current = { day: 1, hour: 8, minute: 0 };
       setSimDay(1);
       setSimHour(8);
       setSimMinute(0);
@@ -1279,6 +1389,16 @@ export default function App() {
         onClose={() => setIsExportModalOpen(false)}
         interactions={interactions}
         agents={agents}
+      />
+
+      {/* Development Diagnostics HUD (Bottom-Left) */}
+      <DebugMetricsHUD
+        agentCount={agents.length}
+        activeBubblesCount={activeBubbles.length}
+        simDay={simDay}
+        simHour={simHour}
+        simMinute={simMinute}
+        isCloudReady={isCloudReady}
       />
     </div>
   );
