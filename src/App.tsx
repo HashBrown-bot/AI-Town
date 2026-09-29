@@ -59,6 +59,8 @@ import {
   registerEventEyewitnessKnowledge 
 } from './systems/InformationSystem';
 import { soundEngine } from './utils/audioSystem';
+import { logger } from './utils/logger';
+import { DebugMetricsHUD } from './components/DebugMetricsHUD';
 
 // Local Storage Keys for Instant Zero-Flash Hydration
 const STORAGE_SIM_STATE = 'aetheria_sim_state_v2';
@@ -69,14 +71,10 @@ const STORAGE_KNOWLEDGE = 'aetheria_knowledge_v2';
 const STORAGE_ECONOMY = 'aetheria_economy_v2';
 
 function loadStoredSimState() {
-  console.group('[Aetheria 调试日志] 1. loadStoredSimState: 开始加载本地存储状态');
-  console.log('读取 LocalStorage 键名:', STORAGE_SIM_STATE);
   try {
     const item = localStorage.getItem(STORAGE_SIM_STATE);
-    console.log('LocalStorage 原始字符串值:', item);
     if (item) {
       const data = JSON.parse(item);
-      console.log('JSON.parse 解析后对象:', data);
       if (typeof data.simDay === 'number' && data.simDay >= 1) {
         const loadedState = {
           simDay: data.simDay,
@@ -84,21 +82,15 @@ function loadStoredSimState() {
           simMinute: typeof data.simMinute === 'number' ? data.simMinute : 15,
           weather: data.weather || 'clear',
         };
-        console.log('✅ 成功从 LocalStorage 恢复模拟状态:', loadedState);
-        console.groupEnd();
+        logger.info('SimState', 'Restored simulation state from LocalStorage:', loadedState);
         return loadedState;
-      } else {
-        console.warn('⚠️ LocalStorage 中 simDay 校验失败 (非数值或小于1):', data.simDay);
       }
-    } else {
-      console.log('ℹ️ LocalStorage 为空，尚无本地缓存记录');
     }
   } catch (err) {
-    console.error('❌ 解析 LocalStorage 发生异常:', err);
+    logger.warn('SimState', 'Failed to parse LocalStorage sim state:', err);
   }
   const defaultState = { simDay: 1, simHour: 9, simMinute: 15, weather: 'clear' as const };
-  console.log('ℹ️ 使用默认初始状态:', defaultState);
-  console.groupEnd();
+  logger.info('SimState', 'Using default simulation state:', defaultState);
   return defaultState;
 }
 

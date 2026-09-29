@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { InteractionRecord, Agent, TownEvent, TownAnalysis, AgentKnowledge, TownEconomyState, EconomicTransaction } from '../types/town';
+import { logger } from '../utils/logger';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -53,18 +54,29 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth.currentUser?.emailVerified,
     },
   };
-  console.warn('Firestore Operation Notice: ', JSON.stringify(errInfo));
+  logger.error('Firestore', error, { operationType, path });
   return errInfo;
 }
 
-// Connection test helper
+// Connection test helper using simulation_state/current (allowed by firestore.rules)
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    // simulation_state/{stateId} has explicit allow read rule.
+    // getDocFromServer verifies network connectivity, valid authentication, and rule permissions.
+    await getDocFromServer(doc(db, 'simulation_state', 'current'));
+    logger.info('Firebase', 'Connected successfully to Firestore (simulation_state accessible)');
+    recordFirestoreRead(1);
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline or starting up.');
+  } catch (error: any) {
+    const code = error?.code || '';
+    const message = error?.message || String(error);
+
+    if (code === 'permission-denied' || message.includes('permission') || message.includes('Permission')) {
+      logger.error('Firebase', new Error(`Permission Denied on testConnection: ${message}`));
+    } else if (code === 'unavailable' || message.includes('offline') || message.includes('Failed to fetch')) {
+      logger.warn('Firebase', `Network/Offline Warning: ${message}`);
+    } else {
+      logger.error('Firebase', new Error(`Firestore Connection Error: ${message}`));
     }
     return false;
   }
@@ -372,11 +384,13 @@ let lastCloudOpTimestamp = Date.now();
 export function recordFirestoreWrite() {
   sessionWriteCount++;
   lastCloudOpTimestamp = Date.now();
+  logger.recordMetric('firestoreWrites', 1);
 }
 
 export function recordFirestoreRead(count: number = 1) {
   sessionReadCount += count;
   lastCloudOpTimestamp = Date.now();
+  logger.recordMetric('firestoreReads', count);
 }
 
 export interface FirestoreCapacityMetrics {

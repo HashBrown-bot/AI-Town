@@ -151,34 +151,34 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-slate-950 text-slate-100 flex flex-col h-full overflow-hidden select-none">
+    <div className="flex-1 text-[#f8f2e7] flex flex-col h-full overflow-hidden select-none">
       {/* Top Banner / Navigation */}
-      <div className="border-b border-slate-800 bg-slate-900/90 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 backdrop-blur-md">
+      <div className="border-b border-[#344672]/30 bg-[#202b46]/80 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-600/30 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-900/20">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ffb86b]/20 to-[#f7a76c]/30 border border-[#ffb86b]/40 flex items-center justify-center text-[#ffc97a] shadow-lg shadow-amber-950/20">
             <Coins className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-white tracking-wide">小镇经济系统中心</h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              <h2 className="text-base font-bold text-[#f8f2e7] tracking-wide">小镇经济系统中心</h2>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/30">
                 双轨驱动引擎 (Emotion + Resource)
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#c9c5d1] mt-0.5">
               监控资金流通、居民财富、商铺营利、物价供需波动与宏观民生调控
             </p>
           </div>
         </div>
 
         {/* Tab switchers */}
-        <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs">
+        <div className="flex items-center bg-[#17223b]/90 p-1 rounded-xl border border-[#344672]/40 text-xs">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'overview' 
-                ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20' 
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] font-bold shadow-md shadow-amber-950/30' 
+                : 'text-[#c9c5d1] hover:text-[#f8f2e7]'
             }`}
           >
             宏观总览
@@ -187,8 +187,8 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
             onClick={() => setActiveTab('residents')}
             className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'residents' 
-                ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20' 
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] font-bold shadow-md shadow-amber-950/30' 
+                : 'text-[#c9c5d1] hover:text-[#f8f2e7]'
             }`}
           >
             居民财富榜 ({agents.length})
@@ -197,8 +197,8 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
             onClick={() => setActiveTab('shops')}
             className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'shops' 
-                ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20' 
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] font-bold shadow-md shadow-amber-950/30' 
+                : 'text-[#c9c5d1] hover:text-[#f8f2e7]'
             }`}
           >
             商铺与营收 ({economyState.shops.length})
@@ -207,8 +207,8 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
             onClick={() => setActiveTab('products')}
             className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'products' 
-                ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20' 
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] font-bold shadow-md shadow-amber-950/30' 
+                : 'text-[#c9c5d1] hover:text-[#f8f2e7]'
             }`}
           >
             商品行情 ({economyState.products.length})
@@ -217,8 +217,8 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
             onClick={() => setActiveTab('transactions')}
             className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'transactions' 
-                ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20' 
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-gradient-to-r from-[#ffb86b] to-[#f7a76c] text-[#17223b] font-bold shadow-md shadow-amber-950/30' 
+                : 'text-[#c9c5d1] hover:text-[#f8f2e7]'
             }`}
           >
             交易流水 ({economyState.recentTransactions.length})
@@ -230,15 +230,15 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
       {actionNotice && (
         <div className={`px-4 py-2 border-b text-xs flex items-center justify-between transition-all ${
           actionNotice.type === 'success' 
-            ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-200' 
+            ? 'bg-[#71c68b]/20 border-[#71c68b]/40 text-[#91d69d]' 
             : actionNotice.type === 'warn'
-            ? 'bg-rose-950/80 border-rose-500/40 text-rose-200'
-            : 'bg-amber-950/80 border-amber-500/40 text-amber-200'
+            ? 'bg-[#f28cb1]/20 border-[#f28cb1]/40 text-[#ff9ec4]' 
+            : 'bg-[#ffb86b]/20 border-[#ffb86b]/40 text-[#ffc97a]'
         }`}>
           <span>{actionNotice.text}</span>
           <button 
             onClick={() => setActionNotice(null)} 
-            className="text-slate-400 hover:text-white ml-2"
+            className="text-[#c9c5d1] hover:text-white ml-2"
           >
             ✕
           </button>
@@ -250,52 +250,52 @@ export const TownEconomyPanel: React.FC<TownEconomyPanelProps> = ({
         {/* Top 5 Key Macro Indicators */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
           {/* Card 1: Total Money Supply */}
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="game-panel p-3.5 relative overflow-hidden">
+            <div className="flex items-center justify-between text-[#c9c5d1] text-xs">
               <span>小镇资金流通量 (M1)</span>
-              <Coins className="w-4 h-4 text-amber-400" />
+              <Coins className="w-4 h-4 text-[#ffc97a]" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold font-mono text-amber-300">
+              <span className="text-2xl font-bold font-mono text-[#ffc97a]">
                 {economyState.totalMoneySupply.toLocaleString()}
               </span>
-              <span className="text-[11px] text-amber-500/80">🌟 银星币</span>
+              <span className="text-[11px] text-[#ffb86b]/80">🌟 银星币</span>
             </div>
-            <div className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+            <div className="mt-1.5 text-[11px] text-[#8f93a8] flex items-center gap-1">
               <span>居民储蓄 + 商铺储备 + 市政金</span>
             </div>
           </div>
 
           {/* Card 2: Resident Wealth */}
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="game-panel p-3.5 relative overflow-hidden">
+            <div className="flex items-center justify-between text-[#c9c5d1] text-xs">
               <span>居民总储蓄财富</span>
-              <Wallet className="w-4 h-4 text-emerald-400" />
+              <Wallet className="w-4 h-4 text-[#71c68b]" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold font-mono text-emerald-300">
+              <span className="text-2xl font-bold font-mono text-[#91d69d]">
                 {economyState.totalResidentWealth.toLocaleString()}
               </span>
-              <span className="text-[11px] text-emerald-500/80">🌟</span>
+              <span className="text-[11px] text-[#71c68b]/80">🌟</span>
             </div>
-            <div className="mt-1.5 text-[11px] text-slate-400">
+            <div className="mt-1.5 text-[11px] text-[#8f93a8]">
               人均约 {Math.round(economyState.totalResidentWealth / Math.max(1, agents.length))} 🌟
             </div>
           </div>
 
           {/* Card 3: Commercial Revenue */}
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="game-panel p-3.5 relative overflow-hidden">
+            <div className="flex items-center justify-between text-[#c9c5d1] text-xs">
               <span>商业总累计营业额</span>
-              <Store className="w-4 h-4 text-sky-400" />
+              <Store className="w-4 h-4 text-[#73c7e8]" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold font-mono text-sky-300">
+              <span className="text-2xl font-bold font-mono text-[#8ed8f8]">
                 {economyState.totalShopRevenue.toLocaleString()}
               </span>
-              <span className="text-[11px] text-sky-500/80">🌟</span>
+              <span className="text-[11px] text-[#73c7e8]/80">🌟</span>
             </div>
-            <div className="mt-1.5 text-[11px] text-slate-400">
+            <div className="mt-1.5 text-[11px] text-[#8f93a8]">
               共 {economyState.shops.length} 家社区商铺
             </div>
           </div>

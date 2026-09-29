@@ -244,17 +244,17 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
 
                 {/* Expanded Details: Full Dialogue Transcript & Cognition */}
                 {isExpanded && (
-                  <div className="px-5 pb-5 pt-2 border-t border-slate-800 bg-slate-950/50 space-y-4">
+                  <div className="px-5 pb-5 pt-3 border-t border-[#344672]/30 bg-[#17223b]/60 space-y-4">
                     {/* One-sentence executive narrative */}
-                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300">
-                      <span className="text-slate-500 font-mono uppercase mr-2">【对话概要】</span>
+                    <div className="p-3 rounded-xl bg-[#202b46]/80 border border-[#344672]/40 text-xs text-[#c9c5d1]">
+                      <span className="text-[#ffc97a] font-mono uppercase mr-2 font-semibold">【奇遇概要】</span>
                       {record.summary}
                     </div>
 
                     {/* Chat Bubble Transcript */}
                     <div className="space-y-3 pl-2">
-                      <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3 text-blue-400" />
+                      <div className="text-[11px] font-medium text-[#c9c5d1] uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#ffc97a]" />
                         <span>完整互动原录逐句追踪</span>
                       </div>
 
@@ -267,23 +267,23 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
                             key={idx}
                             className={`flex flex-col ${isFirstSpeaker ? 'items-start' : 'items-end'}`}
                           >
-                            <div className="flex items-center gap-2 mb-1 text-[11px] text-slate-400">
+                            <div className="flex items-center gap-2 mb-1 text-[11px] text-[#8f93a8]">
                               <span 
                                 onClick={() => onSelectAgent(msg.speakerId)}
-                                className="font-semibold text-slate-200 hover:text-blue-400 cursor-pointer transition"
+                                className="font-semibold text-[#f8f2e7] hover:text-[#ffc97a] cursor-pointer transition"
                               >
                                 {msg.speakerName}
                               </span>
-                              <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-400 font-mono">
+                              <span className="px-1.5 py-0.2 rounded-full bg-[#202b46] text-[10px] text-[#c9c5d1] border border-white/5 font-mono">
                                 情感: {msg.emotion}
                               </span>
                             </div>
 
                             <div
-                              className={`max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl text-xs leading-relaxed ${
+                              className={`max-w-[85%] sm:max-w-[70%] p-3.5 rounded-2xl text-xs leading-relaxed ${
                                 isFirstSpeaker
-                                  ? 'bg-slate-800/90 text-slate-100 rounded-tl-sm border border-slate-700/60'
-                                  : 'bg-blue-600/20 text-blue-100 rounded-tr-sm border border-blue-500/30'
+                                  ? 'bg-[#273552] text-[#f8f2e7] rounded-tl-sm border border-[#41537e]/40 shadow-sm'
+                                  : 'bg-[#ffb86b]/15 text-[#fff1d6] rounded-tr-sm border border-[#ffb86b]/30 shadow-sm'
                               }`}
                             >
                               {msg.text}
@@ -294,19 +294,20 @@ export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
                     </div>
 
                     {/* Relationship Impact & Memory Generation */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#344672]/30">
                       {Object.entries(record.relationshipImpact || {}).map(([agentId, impact]) => {
                         const agent = agents.find(a => a.id === agentId);
                         return (
                           <div
                             key={agentId}
-                            className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs"
+                            className="p-3 rounded-xl bg-[#202b46]/70 border border-[#344672]/30 text-xs"
                           >
-                            <div className="font-medium text-slate-200">
-                              {agent?.name} 心理回响：
+                            <div className="font-semibold text-[#f8f2e7] flex items-center gap-1.5">
+                              <Heart className="w-3 h-3 text-[#f28cb1]" />
+                              <span>{agent?.name} 心理回响：</span>
                             </div>
-                            <div className="text-[11px] text-slate-400 mt-1">
-                              好感度变动: <b className={impact.deltaAffinity >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            <div className="text-[11px] text-[#c9c5d1] mt-1">
+                              好感度变动: <b className={impact.deltaAffinity >= 0 ? 'text-[#71c68b]' : 'text-[#f28cb1]'}>
                                 {impact.deltaAffinity >= 0 ? `+${impact.deltaAffinity}` : impact.deltaAffinity}
                               </b>
                               {impact.note && ` (${impact.note})`}
