@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Agent, Building, ActiveInteractionBubble } from '../types/town';
-import { ZoomIn, ZoomOut, Maximize2, Compass, Sun, Moon, CloudRain, Volume2, VolumeX, Sparkles, Feather, Coffee } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Compass } from 'lucide-react';
 import { soundEngine } from '../utils/audioSystem';
+import { interpolatePosition, SIMULATION_STEP_MS } from '../utils/simulation';
 
 interface TownCanvasProps {
   agents: Agent[];
@@ -13,366 +14,179 @@ interface TownCanvasProps {
   activeInteractions: ActiveInteractionBubble[];
   simHour: number;
   simMinute: number;
+  simSpeed: number;
   weather: 'clear' | 'golden_sunset' | 'rainy' | 'starry_night' | 'misty_morning';
 }
+type Point = { x: number; y: number };
 
-export const TownCanvas: React.FC<TownCanvasProps> = ({
-  agents,
-  buildings,
-  selectedAgentId,
-  onSelectAgent,
-  selectedBuildingId,
-  onSelectBuilding,
-  activeInteractions,
-  simHour,
-  simMinute,
-  weather,
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Viewport camera offset & zoom
-  const [zoom, setZoom] = useState<number>(1.0);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [followAgent, setFollowAgent] = useState<boolean>(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(soundEngine.getIsPlaying());
-
-  // Animation frame loop
-  const animFrameRef = useRef<number | null>(null);
-  const tickRef = useRef<number>(0);
-
-  // Auto center or follow selected agent
+export const TownCanvas: React.FC<TownCanvasProps> = props => {
+  const { agents, selectedAgentId, onSelectAgent, onSelectBuilding, simSpeed } = props;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const [followAgent, setFollowAgent] = useState(false);
+  const stateRef = useRef({ ...props, zoom, pan, followAgent });
+  stateRef.current = { ...props, zoom, pan, followAgent };
+  const visiblePositions = useRef(new Map<string, Point>());
+  const visiblePan = useRef(pan);
+  const transitionRef = useRef({ from: new Map<string, Point>(), started: 0, duration: 0 });
+  const dragRef = useRef<{ x: number; y: number; pan: Point; moved: boolean } | null>(null);
+  const didDragRef = useRef(false);
   useEffect(() => {
-    if (followAgent && selectedAgentId) {
-      const targetAgent = agents.find(a => a.id === selectedAgentId);
-      if (targetAgent && canvasRef.current) {
-        const { width, height } = canvasRef.current;
-        setPan({
-          x: width / 2 - targetAgent.x * zoom,
-          y: height / 2 - targetAgent.y * zoom,
-        });
-      }
-    }
-  }, [followAgent, selectedAgentId, agents, zoom]);
+    transitionRef.current = {
+      from: new Map(agents.map(agent => [agent.id, visiblePositions.current.get(agent.id) || agent])),
+      started: performance.now(),
+      duration: simSpeed > 0 ? SIMULATION_STEP_MS / simSpeed : 0,
+    };
+  }, [agents, simSpeed]);
 
-  // Center camera initially
-  useEffect(() => {
-    if (canvasRef.current) {
-      const { width, height } = canvasRef.current;
-      setPan({
-        x: (width - 1100 * zoom) / 2,
-        y: (height - 950 * zoom) / 2,
-      });
-    }
-  }, []);
-
-  const handleResetCamera = useCallback(() => {
-    if (!canvasRef.current) return;
-    const { width, height } = canvasRef.current;
-    setZoom(1.0);
-    setPan({
-      x: (width - 1100) / 2,
-      y: (height - 950) / 2,
-    });
+  const fitCamera = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = canvas.clientWidth, height = canvas.clientHeight;
+    const fit = Math.max(.18, Math.min(1.5, (width - 32) / 1150, (height - 32) / 1000));
+    setZoom(fit);
+    setPan({ x: (width - 1150 * fit) / 2, y: (height - 1000 * fit) / 2 });
     setFollowAgent(false);
   }, []);
 
-  const toggleSound = () => {
-    const playing = soundEngine.toggleMusic();
-    setIsAudioPlaying(playing);
-  };
+  // One render loop for the lifetime of this canvas. Simulation snapshots only
+  // update refs, preserving particles and interpolating movement between ticks.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    let frame = 0, tick = 0, previousTime = performance.now();
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const ambientParticles = Array.from({ length: 30 }, () => ({
+      x: Math.random() * 1150, y: Math.random() * 1000,
+      speedX: -.3 - Math.random() * .7, speedY: .4 + Math.random() * .8,
+      size: 2.5 + Math.random() * 2.5,
+      color: ['#f28cb1', '#ffc97a', '#71c68b', '#ffe8c2'][Math.floor(Math.random() * 4)],
+      rotation: Math.random() * Math.PI * 2,
+    }));
+    const smokePuffs: { x: number; y: number; originX: number; originY: number; size: number; alpha: number; age: number; maxAge: number }[] = [];
+    const chimneys = [{ x: 300, y: 395 }, { x: 420, y: 700 }, { x: 890, y: 690 }, { x: 670, y: 110 }];
+    let dpr = 1;
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
+      fitCamera();
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    resize();
+    const render = (now: number) => {
+      frame = requestAnimationFrame(render);
+      if (document.hidden || now - previousTime < 1000 / 60) return;
+      const elapsed = Math.min(now - previousTime, 100);
+      previousTime = now;
+      if (!reducedMotion.matches) tick += elapsed / (1000 / 60);
+      const { agents, buildings, selectedAgentId, selectedBuildingId, activeInteractions, zoom, pan, followAgent, simHour, weather } = stateRef.current;
+      const transition = transitionRef.current;
+      const progress = transition.duration > 0 ? (now - transition.started) / transition.duration : 1;
+      const rendered = agents.map(agent => {
+        const position = interpolatePosition(transition.from.get(agent.id) || agent, agent, progress);
+        visiblePositions.current.set(agent.id, position);
+        return { ...agent, ...position };
+      });
+      const liveIds = new Set(agents.map(agent => agent.id));
+      for (const id of visiblePositions.current.keys()) if (!liveIds.has(id)) visiblePositions.current.delete(id);
+      const followed = followAgent ? rendered.find(agent => agent.id === selectedAgentId) : null;
+      const camera = followed ? { x: canvas.clientWidth / 2 - followed.x * zoom, y: canvas.clientHeight / 2 - followed.y * zoom } : pan;
+      visiblePan.current = camera;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.fillStyle = '#1a3028';
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(camera.x, camera.y);
+      ctx.scale(zoom, zoom);
+      drawCozyGroundAndWaters(ctx, tick);
+      drawCozyEnvironment(ctx, tick, simHour);
+      if (!reducedMotion.matches) updateAndDrawSmoke(ctx, smokePuffs, chimneys, Math.floor(tick));
+      buildings.forEach(building => drawFantasyBuilding(ctx, building, building.id === selectedBuildingId, simHour, tick));
+      rendered.sort((a, b) => a.y - b.y).forEach(agent => drawFantasyAgent(ctx, agent, agent.id === selectedAgentId, tick));
+      activeInteractions.forEach(bubble => drawCozyInteractionBubble(ctx, bubble, tick));
+      if (!reducedMotion.matches) drawAmbientParticles(ctx, weather, ambientParticles, tick, simHour);
+      drawCelestialLighting(ctx, simHour, weather, 1150, 1000);
+      ctx.restore();
+    };
+    frame = requestAnimationFrame(render);
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [fitCamera]);
 
-  // Main Canvas Render Loop
+  const changeZoom = useCallback((factor: number, anchor?: Point) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const state = stateRef.current;
+    const next = Math.max(.18, Math.min(2.2, state.zoom * factor));
+    const point = anchor || { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+    const camera = visiblePan.current;
+    setPan({ x: point.x - (point.x - camera.x) * next / state.zoom, y: point.y - (point.y - camera.y) * next / state.zoom });
+    setZoom(next);
+    setFollowAgent(false);
+  }, []);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Environmental particles: leaves, petals, fireflies
-    const ambientParticles: { x: number; y: number; speedX: number; speedY: number; size: number; color: string; rotation: number }[] = [];
-    for (let i = 0; i < 45; i++) {
-      ambientParticles.push({
-        x: Math.random() * 1150,
-        y: Math.random() * 1000,
-        speedX: -0.3 - Math.random() * 0.7,
-        speedY: 0.4 + Math.random() * 0.8,
-        size: 2.5 + Math.random() * 2.5,
-        color: ['#f28cb1', '#ffc97a', '#71c68b', '#ffe8c2'][Math.floor(Math.random() * 4)],
-        rotation: Math.random() * Math.PI * 2
-      });
-    }
-
-    // Chimney smoke particles
-    const smokePuffs: { x: number; y: number; originX: number; originY: number; size: number; alpha: number; age: number; maxAge: number }[] = [];
-    const chimneyOrigins = [
-      { x: 300, y: 395 }, // Cafe chimney
-      { x: 420, y: 700 }, // Bakery chimney
-      { x: 890, y: 690 }, // Cottages chimney
-      { x: 670, y: 110 }, // Town Hall chimney
-    ];
-
-    const render = () => {
-      tickRef.current += 1;
-      const tick = tickRef.current;
-
-      // Handle canvas resize
-      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-      }
-
-      ctx.save();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Disable blurry smoothing for crisp pixel aesthetics
-      ctx.imageSmoothingEnabled = false;
-
-      // Apply camera Pan & Zoom transform
-      ctx.translate(pan.x, pan.y);
-      ctx.scale(zoom, zoom);
-
-      // 1. Draw World Ground (Cozy Grass, River, Wooden Bridge, Stone Paths)
-      drawCozyGroundAndWaters(ctx, tick);
-
-      // 2. Draw Decorative Environment (Fountain, Benches, Flowerbeds, Trees, Lampposts, Little Animals)
-      drawCozyEnvironment(ctx, tick, simHour);
-
-      // 3. Draw Chimney Smoke (behind high roof elements)
-      updateAndDrawSmoke(ctx, smokePuffs, chimneyOrigins, tick);
-
-      // 4. Draw Buildings (Rich architectural pixel art)
-      buildings.forEach(b => {
-        drawFantasyBuilding(ctx, b, b.id === selectedBuildingId, simHour, tick);
-      });
-
-      // 5. Draw Characters (Agents) sorted by Y coordinate for correct depth layering
-      const sortedAgents = [...agents].sort((a, b) => a.y - b.y);
-      sortedAgents.forEach(agent => {
-        drawFantasyAgent(ctx, agent, agent.id === selectedAgentId, tick);
-      });
-
-      // 6. Draw Speech & Thought Bubbles for active interactions
-      activeInteractions.forEach(bubble => {
-        drawCozyInteractionBubble(ctx, bubble, tick);
-      });
-
-      // 7. Ambient Floating Particles (Petals, Leaves, Rain, Fireflies)
-      drawAmbientParticles(ctx, weather, ambientParticles, tick, simHour);
-
-      // 8. Soft Atmosphere Lighting & Day/Night Celestial Overlay
-      drawCelestialLighting(ctx, simHour, weather, 1150, 1000);
-
-      ctx.restore();
-
-      animFrameRef.current = requestAnimationFrame(render);
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      changeZoom(event.deltaY < 0 ? 1.08 : .92, { x: event.clientX - rect.left, y: event.clientY - rect.top });
     };
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', wheel);
+  }, [changeZoom]);
 
-    animFrameRef.current = requestAnimationFrame(render);
-
-    return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
-    };
-  }, [agents, buildings, selectedAgentId, selectedBuildingId, activeInteractions, zoom, pan, simHour, weather]);
-
-  // Mouse Interaction Handlers for Panning & Inspecting
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
+  const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (didDragRef.current) { didDragRef.current = false; return; }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const clickX = (event.clientX - rect.left - visiblePan.current.x) / zoom;
+    const clickY = (event.clientY - rect.top - visiblePan.current.y) / zoom;
+    const hit = [...agents].reverse().find(agent => {
+      const p = visiblePositions.current.get(agent.id) || agent;
+      return Math.hypot(p.x - clickX, p.y - 4 - clickY) < 24;
     });
-    setFollowAgent(false);
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-    const newZoom = Math.max(0.6, Math.min(2.2, zoom * zoomFactor));
-
-    if (canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      setPan({
-        x: mouseX - (mouseX - pan.x) * (newZoom / zoom),
-        y: mouseY - (mouseY - pan.y) * (newZoom / zoom),
-      });
-      setZoom(newZoom);
-    }
-  };
-
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const clickX = (e.clientX - rect.left - pan.x) / zoom;
-    const clickY = (e.clientY - rect.top - pan.y) / zoom;
-
-    // Check hit on agents (radius ~ 22px)
-    let hitAgent = false;
-    for (let i = agents.length - 1; i >= 0; i--) {
-      const a = agents[i];
-      const dist = Math.hypot(a.x - clickX, (a.y - 4) - clickY);
-      if (dist < 24) {
-        soundEngine.playClick();
-        onSelectAgent(a.id);
-        onSelectBuilding(null);
-        hitAgent = true;
-        break;
-      }
-    }
-
-    if (hitAgent) return;
-
-    // Check hit on buildings
-    let hitBuilding = false;
-    for (let i = buildings.length - 1; i >= 0; i--) {
-      const b = buildings[i];
-      if (
-        clickX >= b.x - 8 &&
-        clickX <= b.x + b.width + 8 &&
-        clickY >= b.y - 12 &&
-        clickY <= b.y + b.height + 8
-      ) {
-        soundEngine.playClick();
-        onSelectBuilding(b.id);
-        onSelectAgent(null);
-        hitBuilding = true;
-        break;
-      }
-    }
-
-    if (!hitBuilding) {
-      onSelectAgent(null);
-      onSelectBuilding(null);
-    }
+    if (hit) { soundEngine.playClick(); onSelectAgent(hit.id); onSelectBuilding(null); return; }
+    const building = [...props.buildings].reverse().find(b => clickX >= b.x - 8 && clickX <= b.x + b.width + 8 && clickY >= b.y - 12 && clickY <= b.y + b.height + 8);
+    onSelectBuilding(building?.id || null);
+    onSelectAgent(null);
   };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-[#151d33]">
-      <canvas
-        ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
+    <div className="relative w-full h-full select-none overflow-hidden">
+      <canvas ref={canvasRef} role="img" aria-label="小镇地图。可拖动和缩放，也可使用侧栏选择居民。" tabIndex={0}
+        onPointerDown={event => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = { x: event.clientX, y: event.clientY, pan: visiblePan.current, moved: false };
+          didDragRef.current = false;
+        }}
+        onPointerMove={event => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+          if (Math.hypot(dx, dy) > 5) drag.moved = true;
+          if (drag.moved) { setPan({ x: drag.pan.x + dx, y: drag.pan.y + dy }); setFollowAgent(false); }
+        }}
+        onPointerUp={event => { didDragRef.current = dragRef.current?.moved || false; dragRef.current = null; event.currentTarget.releasePointerCapture(event.pointerId); }}
+        onPointerCancel={() => { dragRef.current = null; didDragRef.current = true; }}
         onClick={handleClick}
-        className="w-full h-full cursor-grab active:cursor-grabbing block"
-      />
-
-      {/* Floating Game HUD Controls (Top Right) */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 game-panel p-2 shadow-xl z-10">
-        <button
-          onClick={() => {
-            soundEngine.playClick();
-            setZoom(z => Math.min(2.0, z + 0.15));
-          }}
-          title="放大视角"
-          className="p-2 rounded-xl text-[#c9c5d1] hover:text-[#fff1d6] hover:bg-[#344672]/50 transition"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={() => {
-            soundEngine.playClick();
-            setZoom(z => Math.max(0.65, z - 0.15));
-          }}
-          title="缩小视角"
-          className="p-2 rounded-xl text-[#c9c5d1] hover:text-[#fff1d6] hover:bg-[#344672]/50 transition"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-
-        <div className="h-4 w-px bg-[#4a5f8c]/40" />
-
-        <button
-          onClick={() => {
-            soundEngine.playClick();
-            handleResetCamera();
-          }}
-          title="镜头重置居中"
-          className="p-2 rounded-xl text-[#c9c5d1] hover:text-[#fff1d6] hover:bg-[#344672]/50 transition"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={() => {
-            soundEngine.playClick();
-            setFollowAgent(!followAgent);
-          }}
-          disabled={!selectedAgentId}
-          title={selectedAgentId ? '视角锁定跟随该居民' : '请先选中小镇居民'}
-          className={`p-2 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold ${
-            followAgent && selectedAgentId
-              ? 'bg-[#ffb86b]/20 text-[#ffc97a] border border-[#ffb86b]/40 shadow-xs'
-              : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#344672]/50 disabled:opacity-30'
-          }`}
-        >
-          <Compass className={`w-4 h-4 ${followAgent ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">镜头追踪</span>
-        </button>
-
-        <div className="h-4 w-px bg-[#4a5f8c]/40" />
-
-        <button
-          onClick={toggleSound}
-          title={isAudioPlaying ? '静音治愈氛围音' : '开启小镇治愈环境音'}
-          className={`p-2 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold ${
-            isAudioPlaying
-              ? 'bg-[#71c68b]/20 text-[#91d69d] border border-[#71c68b]/40'
-              : 'text-[#8f93a8] hover:text-[#f8f2e7] hover:bg-[#344672]/50'
-          }`}
-        >
-          {isAudioPlaying ? <Volume2 className="w-4 h-4 text-[#71c68b]" /> : <VolumeX className="w-4 h-4" />}
-          <span className="hidden sm:inline">{isAudioPlaying ? '氛围音 演奏中' : '静音'}</span>
-        </button>
-      </div>
-
-      {/* Cozy Town Status Pill (Bottom Left) */}
-      <div className="absolute bottom-5 left-5 game-panel px-4 py-2.5 shadow-2xl text-xs flex items-center gap-3.5 text-[#c9c5d1] z-10 border border-[#485e8a]/40">
-        <div className="flex items-center gap-2">
-          {simHour >= 6 && simHour < 18 ? (
-            <Sun className="w-4 h-4 text-[#ffc97a] animate-pulse" />
-          ) : (
-            <Moon className="w-4 h-4 text-[#b9a6ff]" />
-          )}
-          <span className="font-mono text-[#f8f2e7] font-bold text-xs tracking-wider">
-            {String(simHour).padStart(2, '0')}:{String(simMinute).padStart(2, '0')}
-          </span>
-        </div>
-
-        <div className="h-3.5 w-px bg-[#4a5f8c]/40" />
-
-        <div className="flex items-center gap-1.5 text-[#fff1d6]">
-          <Sparkles className="w-3.5 h-3.5 text-[#ffc97a]" />
-          <span className="font-medium">
-            {weather === 'rainy' ? '微雨润物' : weather === 'golden_sunset' ? '落霞流金' : weather === 'starry_night' ? '星河璀璨' : weather === 'misty_morning' ? '晨雾微光' : '天朗气清'}
-          </span>
-        </div>
-
-        <div className="h-3.5 w-px bg-[#4a5f8c]/40" />
-
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#71c68b] shadow-[0_0_8px_#71c68b]" />
-          <span className="text-[#c9c5d1]">
-            居民 <strong className="text-[#f8f2e7] font-bold">{agents.length}</strong> 位
-          </span>
-        </div>
+        onKeyDown={event => {
+          const offsets: Record<string, Point> = { ArrowLeft: { x: 30, y: 0 }, ArrowRight: { x: -30, y: 0 }, ArrowUp: { x: 0, y: 30 }, ArrowDown: { x: 0, y: -30 } };
+          if (offsets[event.key]) { event.preventDefault(); setFollowAgent(false); setPan({ x: visiblePan.current.x + offsets[event.key].x, y: visiblePan.current.y + offsets[event.key].y }); }
+          else if (event.key === '+' || event.key === '=') { event.preventDefault(); changeZoom(1.15); }
+          else if (event.key === '-') { event.preventDefault(); changeZoom(1 / 1.15); }
+          else if (event.key === '0') fitCamera();
+        }}
+        className="w-full h-full cursor-grab active:cursor-grabbing block" style={{ touchAction: 'none' }} />
+      <div className="town-canvas-controls">
+        <button aria-label="放大地图" onClick={() => changeZoom(1.15)}><ZoomIn size={16} /></button>
+        <button aria-label="缩小地图" onClick={() => changeZoom(1 / 1.15)}><ZoomOut size={16} /></button>
+        <button aria-label="显示完整地图" onClick={fitCamera}><Maximize2 size={16} /></button>
+        <button aria-label="跟随选中居民" aria-pressed={followAgent && !!selectedAgentId} disabled={!selectedAgentId} className={followAgent && selectedAgentId ? 'active' : ''} onClick={() => { if (followAgent) setPan(visiblePan.current); setFollowAgent(!followAgent); }}><Compass size={16} />跟随</button>
       </div>
     </div>
   );

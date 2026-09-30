@@ -23,6 +23,7 @@ export async function requestAgentDialogue(
 }> {
   try {
     const res = await fetch('/api/ai/dialogue', {
+      signal: AbortSignal.timeout(12000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -96,6 +97,7 @@ export async function requestAgentReflection(
 ): Promise<ReflectionResult> {
   try {
     const res = await fetch('/api/ai/reflect', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,6 +136,7 @@ export async function requestTownAnalysis(
 ): Promise<TownAnalysis> {
   try {
     const res = await fetch('/api/ai/analyze', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -209,6 +212,7 @@ export async function requestEventImpact(
 }> {
   try {
     const res = await fetch('/api/ai/event-impact', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event, agents })
@@ -232,6 +236,7 @@ export async function requestEventImpact(
 export async function generateNewAgentPersona(hint: string): Promise<Partial<Agent>> {
   try {
     const res = await fetch('/api/ai/generate-agent', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ promptHint: hint })

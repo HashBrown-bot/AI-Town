@@ -18,6 +18,12 @@ export function tickAgentAutonomousBehavior(
   isInteracting: boolean = false,
   events: TownEvent[] = []
 ): Agent {
+  // Own the mutable planning state; a tick must never mutate its input snapshot.
+  agent = {
+    ...agent,
+    goal: agent.goal ? { ...agent.goal } : undefined,
+    plan: agent.plan ? { ...agent.plan, steps: agent.plan.steps.map(step => ({ ...step })) } : undefined,
+  };
   // If agent is actively engaged in a modal dialogue bubble, pause autonomous movement
   if (isInteracting) {
     return { ...agent, isMoving: false };
@@ -25,7 +31,8 @@ export function tickAgentAutonomousBehavior(
 
   // 1. Current building resolution & time parsing
   const currentBuilding = buildings.find(b => b.id === agent.currentBuildingId);
-  const simHour = parseInt(simTime.split(':')[0], 10) || 10;
+  const parsedHour = parseInt(simTime.split(':')[0], 10);
+  const simHour = Number.isFinite(parsedHour) ? parsedHour : 10;
 
   // 2. Needs evolution with simulation time, personality, weather, and dynamic linkages
   let needsProfile = updateAgentNeeds(agent, deltaMinutes, currentBuilding, weather, simHour);
@@ -133,8 +140,9 @@ export function tickAgentAutonomousBehavior(
     const dy = (destY - newY) / distToDest;
 
     // Move smoothly along vector
-    newX += dx * agent.speed * 2.2;
-    newY += dy * agent.speed * 2.2;
+    const distance = Math.min(distToDest, Math.max(0, agent.speed) * 6 * deltaMinutes);
+    newX += dx * distance;
+    newY += dy * distance;
 
     if (Math.abs(dx) > Math.abs(dy)) {
       direction = dx > 0 ? 'right' : 'left';
