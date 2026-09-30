@@ -16,6 +16,7 @@ interface TownCanvasProps {
   simMinute: number;
   simSpeed: number;
   weather: 'clear' | 'golden_sunset' | 'rainy' | 'starry_night' | 'misty_morning';
+  focusRequest?: { id: string; sequence: number } | null;
 }
 type Point = { x: number; y: number };
 
@@ -29,6 +30,10 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
   stateRef.current = { ...props, zoom, pan, followAgent };
   const visiblePositions = useRef(new Map<string, Point>());
   const visiblePan = useRef(pan);
+  const visibleZoom = useRef(zoom);
+  const cameraTouched = useRef(false);
+  const easeCamera = useRef(false);
+  const zoomAnchor = useRef<{ screen: Point; world: Point } | null>(null);
   const transitionRef = useRef({ from: new Map<string, Point>(), started: 0, duration: 0 });
   const dragRef = useRef<{ x: number; y: number; pan: Point; moved: boolean } | null>(null);
   const didDragRef = useRef(false);
@@ -48,7 +53,25 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
     setZoom(fit);
     setPan({ x: (width - 1150 * fit) / 2, y: (height - 1000 * fit) / 2 });
     setFollowAgent(false);
+    cameraTouched.current = false;
+    zoomAnchor.current = null;
   }, []);
+
+  useEffect(() => {
+    const agent = stateRef.current.agents.find(item => item.id === props.focusRequest?.id);
+    const canvas = canvasRef.current;
+    if (!agent || !canvas) return;
+    const nextZoom = Math.max(stateRef.current.zoom, .85);
+    cameraTouched.current = true;
+    easeCamera.current = true;
+    zoomAnchor.current = null;
+    setFollowAgent(false);
+    setZoom(nextZoom);
+    setPan({ x: canvas.clientWidth / 2 - agent.x * nextZoom, y: canvas.clientHeight / 2 - agent.y * nextZoom });
+  }, [props.focusRequest]);
+  useEffect(() => {
+    if (!selectedAgentId) { setPan(visiblePan.current); setFollowAgent(false); }
+  }, [selectedAgentId]);
 
   // One render loop for the lifetime of this canvas. Simulation snapshots only
   // update refs, preserving particles and interpolating movement between ticks.
@@ -67,12 +90,15 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
     }));
     const smokePuffs: { x: number; y: number; originX: number; originY: number; size: number; alpha: number; age: number; maxAge: number }[] = [];
     const chimneys = [{ x: 300, y: 395 }, { x: 420, y: 700 }, { x: 890, y: 690 }, { x: 670, y: 110 }];
-    let dpr = 1;
+    let dpr = 1, previousWidth = 0, previousHeight = 0;
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.round(canvas.clientWidth * dpr);
       canvas.height = Math.round(canvas.clientHeight * dpr);
-      fitCamera();
+      if (!cameraTouched.current) fitCamera();
+      else if (previousWidth) setPan({ x: visiblePan.current.x + (canvas.clientWidth - previousWidth) / 2, y: visiblePan.current.y + (canvas.clientHeight - previousHeight) / 2 });
+      previousWidth = canvas.clientWidth;
+      previousHeight = canvas.clientHeight;
     };
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
@@ -83,7 +109,9 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
       const elapsed = Math.min(now - previousTime, 100);
       previousTime = now;
       if (!reducedMotion.matches) tick += elapsed / (1000 / 60);
-      const { agents, buildings, selectedAgentId, selectedBuildingId, activeInteractions, zoom, pan, followAgent, simHour, weather } = stateRef.current;
+      const { agents, buildings, selectedAgentId, selectedBuildingId, activeInteractions, zoom: targetZoom, pan, followAgent, simHour, weather } = stateRef.current;
+      const zoom = reducedMotion.matches ? targetZoom : visibleZoom.current + (targetZoom - visibleZoom.current) * (1 - Math.exp(-elapsed / 130));
+      visibleZoom.current = zoom;
       const transition = transitionRef.current;
       const progress = transition.duration > 0 ? (now - transition.started) / transition.duration : 1;
       const rendered = agents.map(agent => {
@@ -94,7 +122,12 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
       const liveIds = new Set(agents.map(agent => agent.id));
       for (const id of visiblePositions.current.keys()) if (!liveIds.has(id)) visiblePositions.current.delete(id);
       const followed = followAgent ? rendered.find(agent => agent.id === selectedAgentId) : null;
-      const camera = followed ? { x: canvas.clientWidth / 2 - followed.x * zoom, y: canvas.clientHeight / 2 - followed.y * zoom } : pan;
+      const anchor = zoomAnchor.current;
+      const targetCamera = followed ? { x: canvas.clientWidth / 2 - followed.x * zoom, y: canvas.clientHeight / 2 - followed.y * zoom } : anchor ? { x: anchor.screen.x - anchor.world.x * zoom, y: anchor.screen.y - anchor.world.y * zoom } : pan;
+      if (Math.abs(zoom - targetZoom) < .001) zoomAnchor.current = null;
+      const amount = reducedMotion.matches || (!followed && !easeCamera.current) ? 1 : 1 - Math.exp(-elapsed / 160);
+      const camera = { x: visiblePan.current.x + (targetCamera.x - visiblePan.current.x) * amount, y: visiblePan.current.y + (targetCamera.y - visiblePan.current.y) * amount };
+      if (!followed && Math.hypot(camera.x - targetCamera.x, camera.y - targetCamera.y) < .5) easeCamera.current = false;
       visiblePan.current = camera;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -108,6 +141,14 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
       drawCozyEnvironment(ctx, tick, simHour);
       if (!reducedMotion.matches) updateAndDrawSmoke(ctx, smokePuffs, chimneys, Math.floor(tick));
       buildings.forEach(building => drawFantasyBuilding(ctx, building, building.id === selectedBuildingId, simHour, tick));
+      const selected = rendered.find(agent => agent.id === selectedAgentId);
+      if (selected?.isMoving && !activeInteractions.some(bubble => bubble.agentAId === selected.id || bubble.agentBId === selected.id)) {
+        ctx.save();
+        ctx.strokeStyle = '#b1ead5'; ctx.lineWidth = 2 / zoom; ctx.setLineDash([5 / zoom, 6 / zoom]);
+        ctx.beginPath(); ctx.moveTo(selected.x, selected.y); ctx.lineTo(selected.targetX, selected.targetY); ctx.stroke();
+        ctx.setLineDash([]); ctx.beginPath(); ctx.arc(selected.targetX, selected.targetY, 6 / zoom, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       rendered.sort((a, b) => a.y - b.y).forEach(agent => drawFantasyAgent(ctx, agent, agent.id === selectedAgentId, tick));
       activeInteractions.forEach(bubble => drawCozyInteractionBubble(ctx, bubble, tick));
       if (!reducedMotion.matches) drawAmbientParticles(ctx, weather, ambientParticles, tick, simHour);
@@ -125,7 +166,10 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
     const next = Math.max(.18, Math.min(2.2, state.zoom * factor));
     const point = anchor || { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
     const camera = visiblePan.current;
-    setPan({ x: point.x - (point.x - camera.x) * next / state.zoom, y: point.y - (point.y - camera.y) * next / state.zoom });
+    cameraTouched.current = true;
+    easeCamera.current = false;
+    zoomAnchor.current = { screen: point, world: { x: (point.x - camera.x) / visibleZoom.current, y: (point.y - camera.y) / visibleZoom.current } };
+    setPan({ x: point.x - (point.x - camera.x) * next / visibleZoom.current, y: point.y - (point.y - camera.y) * next / visibleZoom.current });
     setZoom(next);
     setFollowAgent(false);
   }, []);
@@ -144,8 +188,8 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (didDragRef.current) { didDragRef.current = false; return; }
     const rect = event.currentTarget.getBoundingClientRect();
-    const clickX = (event.clientX - rect.left - visiblePan.current.x) / zoom;
-    const clickY = (event.clientY - rect.top - visiblePan.current.y) / zoom;
+    const clickX = (event.clientX - rect.left - visiblePan.current.x) / visibleZoom.current;
+    const clickY = (event.clientY - rect.top - visiblePan.current.y) / visibleZoom.current;
     const hit = [...agents].reverse().find(agent => {
       const p = visiblePositions.current.get(agent.id) || agent;
       return Math.hypot(p.x - clickX, p.y - 4 - clickY) < 24;
@@ -169,14 +213,14 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
           if (!drag) return;
           const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
           if (Math.hypot(dx, dy) > 5) drag.moved = true;
-          if (drag.moved) { setPan({ x: drag.pan.x + dx, y: drag.pan.y + dy }); setFollowAgent(false); }
+          if (drag.moved) { cameraTouched.current = true; easeCamera.current = false; zoomAnchor.current = null; setPan({ x: drag.pan.x + dx, y: drag.pan.y + dy }); setFollowAgent(false); }
         }}
         onPointerUp={event => { didDragRef.current = dragRef.current?.moved || false; dragRef.current = null; event.currentTarget.releasePointerCapture(event.pointerId); }}
         onPointerCancel={() => { dragRef.current = null; didDragRef.current = true; }}
         onClick={handleClick}
         onKeyDown={event => {
           const offsets: Record<string, Point> = { ArrowLeft: { x: 30, y: 0 }, ArrowRight: { x: -30, y: 0 }, ArrowUp: { x: 0, y: 30 }, ArrowDown: { x: 0, y: -30 } };
-          if (offsets[event.key]) { event.preventDefault(); setFollowAgent(false); setPan({ x: visiblePan.current.x + offsets[event.key].x, y: visiblePan.current.y + offsets[event.key].y }); }
+          if (offsets[event.key]) { event.preventDefault(); cameraTouched.current = true; easeCamera.current = false; zoomAnchor.current = null; setFollowAgent(false); setPan({ x: visiblePan.current.x + offsets[event.key].x, y: visiblePan.current.y + offsets[event.key].y }); }
           else if (event.key === '+' || event.key === '=') { event.preventDefault(); changeZoom(1.15); }
           else if (event.key === '-') { event.preventDefault(); changeZoom(1 / 1.15); }
           else if (event.key === '0') fitCamera();
@@ -186,7 +230,7 @@ export const TownCanvas: React.FC<TownCanvasProps> = props => {
         <button aria-label="放大地图" onClick={() => changeZoom(1.15)}><ZoomIn size={16} /></button>
         <button aria-label="缩小地图" onClick={() => changeZoom(1 / 1.15)}><ZoomOut size={16} /></button>
         <button aria-label="显示完整地图" onClick={fitCamera}><Maximize2 size={16} /></button>
-        <button aria-label="跟随选中居民" aria-pressed={followAgent && !!selectedAgentId} disabled={!selectedAgentId} className={followAgent && selectedAgentId ? 'active' : ''} onClick={() => { if (followAgent) setPan(visiblePan.current); setFollowAgent(!followAgent); }}><Compass size={16} />跟随</button>
+        <button aria-label="跟随选中居民" aria-pressed={followAgent && !!selectedAgentId} disabled={!selectedAgentId} className={followAgent && selectedAgentId ? 'active' : ''} onClick={() => { cameraTouched.current = true; easeCamera.current = true; zoomAnchor.current = null; if (followAgent) setPan(visiblePan.current); setFollowAgent(!followAgent); }}><Compass size={16} />{followAgent && selectedAgentId ? '跟随中' : '跟随'}</button>
       </div>
     </div>
   );

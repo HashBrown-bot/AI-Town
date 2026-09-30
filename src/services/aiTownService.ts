@@ -1,4 +1,4 @@
-import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult } from '../types/town';
+import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult, GenerationInfo } from '../types/town';
 import { logger } from '../utils/logger';
 
 export async function requestAgentDialogue(
@@ -20,7 +20,9 @@ export async function requestAgentDialogue(
   memoryB: string;
   importance?: number;
   emotionalIntensity?: number;
+  generation?: GenerationInfo;
 }> {
+  const started = performance.now();
   try {
     const res = await fetch('/api/ai/dialogue', {
       signal: AbortSignal.timeout(12000),
@@ -84,7 +86,8 @@ export async function requestAgentDialogue(
       memoryA: `在${location.name}见到了${agentB.name}，两人聊得很愉快。`,
       memoryB: `在${location.name}与${agentA.name}寒暄，感受到了积极的气息。`,
       importance: 6,
-      emotionalIntensity: 5
+      emotionalIntensity: 5,
+      generation: { source: 'client_fallback', reason: 'request_error', latencyMs: Math.round(performance.now() - started) }
     };
   }
 }

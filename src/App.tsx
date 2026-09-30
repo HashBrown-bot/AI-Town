@@ -18,6 +18,7 @@ import {
 import { TownWorkspace } from './components/TownWorkspace';
 import { advanceClock, SIMULATION_STEP_MS, SIMULATION_STEP_MINUTES } from './utils/simulation';
 import { useLocalPersistence } from './utils/useLocalPersistence';
+import { useAgentObservations } from './utils/useAgentObservations';
 import { HeaderNav, TabKey } from './components/HeaderNav';
 const DashboardOverview = lazy(() => import('./components/DashboardOverview').then(module => ({ default: module.DashboardOverview })));
 const LiveInteractionsView = lazy(() => import('./components/LiveInteractionsView').then(module => ({ default: module.LiveInteractionsView })));
@@ -193,6 +194,7 @@ export default function App() {
   const [latestAnalysis, setLatestAnalysis] = useState<TownAnalysis>(INITIAL_ANALYSIS);
   const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>(loadStoredKnowledge);
   const [economyState, setEconomyState] = useState<TownEconomyState>(loadStoredEconomy);
+  const observations = useAgentObservations(agents, simDay, simHour, simMinute);
 
   useLocalPersistence(STORAGE_ECONOMY, economyState);
   useLocalPersistence(STORAGE_AGENTS, agents);
@@ -637,6 +639,7 @@ export default function App() {
     // Mark both agents as occupied
     interactingAgentIdsRef.current.add(agentA.id);
     interactingAgentIdsRef.current.add(agentB.id);
+    setAgents(previous => previous.map(agent => agent.id === agentA.id || agent.id === agentB.id ? { ...agent, isMoving: false } : agent));
 
     // Find nearest building
     let nearestBuilding = buildings[0];
@@ -664,7 +667,8 @@ export default function App() {
       speakerName: agentA.name,
       currentSpeech: `💬 ${agentA.name} 与 ${agentB.name} 驻足相视...`,
       sentiment: 'neutral',
-      progress: 0
+      progress: 0,
+      phase: 'generating'
     };
 
     setActiveBubbles(prev => [...prev, initialBubble]);
@@ -709,7 +713,9 @@ export default function App() {
       const showLine = (line: typeof dialogueResult.dialogue[number]) => {
         setActiveBubbles(prev => prev.map(b => b.id === bubbleId ? {
           ...b, topic: dialogueResult.topic, speakerName: line.speakerName,
-          currentSpeech: line.text, sentiment: dialogueResult.sentiment
+          currentSpeech: line.text, sentiment: dialogueResult.sentiment,
+          phase: 'speaking', progress: 100 / dialogueResult.dialogue.length,
+          ...(dialogueResult.generation ? { generation: dialogueResult.generation } : {})
         } : b));
       };
       if (dialogueResult.dialogue[0]) showLine(dialogueResult.dialogue[0]);
@@ -717,6 +723,7 @@ export default function App() {
       const speechInterval = setInterval(() => {
         if (lineIdx < dialogueResult.dialogue.length) {
           const line = dialogueResult.dialogue[lineIdx];
+          const lineProgress = (lineIdx + 1) / dialogueResult.dialogue.length * 100;
           setActiveBubbles(prev =>
             prev.map(b =>
               b.id === bubbleId
@@ -725,7 +732,8 @@ export default function App() {
                     topic: dialogueResult.topic,
                     speakerName: line.speakerName,
                     currentSpeech: line.text,
-                    sentiment: dialogueResult.sentiment
+                    sentiment: dialogueResult.sentiment,
+                    progress: lineProgress
                   }
                 : b
             )
@@ -735,6 +743,7 @@ export default function App() {
           // Finished conversation
           clearInterval(speechInterval);
           activeTimersRef.current.delete(speechInterval);
+          setActiveBubbles(prev => prev.map(bubble => bubble.id === bubbleId ? { ...bubble, phase: 'finished', progress: 100 } : bubble));
 
           // Remove bubble after a short pause
           const cleanupTimer = setTimeout(() => {
@@ -794,21 +803,22 @@ export default function App() {
         messages: dialogueResult.dialogue,
         relationshipImpact: {
           [agentA.id]: { 
-            deltaAffinity: dialogueResult.affinityDeltaAtoB, 
+            deltaAffinity: calculateAffinityProjection(relOutcome.updatedRelAtoB) - (agentA.affinity?.[agentB.id] ?? 0),
             stage: relOutcome.updatedRelAtoB.relationshipStage,
             dynamic: relOutcome.updatedRelAtoB.dominantDynamic,
             ...(relOutcome.stageTransitionAtoB ? { stageTransition: relOutcome.stageTransitionAtoB } : {}),
             note: dialogueResult.memoryA 
           },
           [agentB.id]: { 
-            deltaAffinity: dialogueResult.affinityDeltaBtoA, 
+            deltaAffinity: calculateAffinityProjection(relOutcome.updatedRelBtoA) - (agentB.affinity?.[agentA.id] ?? 0),
             stage: relOutcome.updatedRelBtoA.relationshipStage,
             dynamic: relOutcome.updatedRelBtoA.dominantDynamic,
             ...(relOutcome.stageTransitionBtoA ? { stageTransition: relOutcome.stageTransitionBtoA } : {}),
             note: dialogueResult.memoryB 
           }
         },
-        tags: [nearestBuilding.name, dialogueResult.sentiment]
+        tags: [nearestBuilding.name, dialogueResult.sentiment],
+        ...(dialogueResult.generation ? { generation: dialogueResult.generation } : {})
       };
 
       // Update State: Add Interaction Record
@@ -920,7 +930,8 @@ export default function App() {
       // Async Persistent Save to Firebase Firestore!
       syncInteractionToCloud(newRecord);
       setCloudSyncCount(c => c + 1);
-      addGameToast('❤️ +5 羁绊提升', `${agentA.name} 与 ${agentB.name} 触碰了彼此心声`, '❤️', '#f28cb1');
+      const formatChange = (delta: number) => `${delta > 0 ? '+' : ''}${delta}`;
+      addGameToast('对话已记录', `${agentA.name} 好感 ${formatChange(newRecord.relationshipImpact[agentA.id].deltaAffinity)} · ${agentB.name} 好感 ${formatChange(newRecord.relationshipImpact[agentB.id].deltaAffinity)}`, '💬', '#9be0c9');
 
     } catch (err) {
       console.error('Encounter execution error:', err);
@@ -970,10 +981,10 @@ export default function App() {
     if (!agentA) return;
     if (interactingAgentIdsRef.current.has(agentId)) return;
 
-    // Pick closest or random other resident
+    // Choose the nearest available neighbor for a predictable intervention.
     const otherAgents = agents.filter(a => a.id !== agentId && !interactingAgentIdsRef.current.has(a.id));
     if (otherAgents.length === 0) return;
-    const agentB = otherAgents[Math.floor(Math.random() * otherAgents.length)];
+    const agentB = otherAgents.reduce((nearest, candidate) => Math.hypot(candidate.x - agentA.x, candidate.y - agentA.y) < Math.hypot(nearest.x - agentA.x, nearest.y - agentA.y) ? candidate : nearest);
 
     // Move them toward each other
     setAgents(prev =>
@@ -985,11 +996,11 @@ export default function App() {
     );
 
     triggerAutonomousDialogue(agentA, agentB);
-    setSelectedAgentId(null);
   };
 
   // 5. Trigger Custom Event Intervention
   const handleTriggerEvent = (event: TownEvent, agentReactions: any[]) => {
+    event = { ...event, simDay };
     setEvents(prev => [event, ...prev]);
     syncEventToCloud(event);
     addGameToast('⚡ 奇遇降临', `【${event.title}】正在席卷小镇！`, '⚡', '#f7a76c');
@@ -1159,10 +1170,10 @@ export default function App() {
         <Suspense fallback={<div className="town-loading" role="status">正在打开…</div>}>
         {currentTab === 'canvas' && (
           <TownWorkspace
-            agents={agents} buildings={buildings} interactions={interactions} events={events}
+            agents={agents} buildings={buildings} interactions={interactions} events={events} observations={observations}
             selectedAgentId={selectedAgentId} onSelectAgent={setSelectedAgentId}
             selectedBuildingId={selectedBuildingId} onSelectBuilding={setSelectedBuildingId}
-            activeInteractions={activeBubbles} simHour={simHour} simMinute={simMinute}
+            activeInteractions={activeBubbles} simDay={simDay} simHour={simHour} simMinute={simMinute}
             simSpeed={simSpeed} weather={weather}
             onOpenAgent={id => { setSelectedAgentId(id); setCurrentTab('evolution'); }}
             onForceInteraction={handleForceInteraction}

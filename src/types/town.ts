@@ -373,6 +373,12 @@ export interface DialogueUtterance {
   emotion: string;
 }
 
+export interface GenerationInfo {
+  source: 'model' | 'server_fallback' | 'client_fallback';
+  reason?: 'no_api_key' | 'quota' | 'api_error' | 'request_error';
+  latencyMs: number;
+}
+
 export interface InteractionRecord {
   id: string;
   timestamp: number;
@@ -395,6 +401,7 @@ export interface InteractionRecord {
     note?: string;
   }>;
   tags: string[];
+  generation?: GenerationInfo;
 }
 
 export interface TownEvent {
@@ -406,6 +413,7 @@ export interface TownEvent {
   targetBuilding?: string;
   timestamp: number;
   simTime: string;
+  simDay?: number;
   active: boolean;
 }
 
@@ -446,6 +454,8 @@ export interface ActiveInteractionBubble {
   speakerName?: string;
   sentiment: string;
   progress: number; // 0-100%
+  phase?: 'generating' | 'speaking' | 'finished';
+  generation?: GenerationInfo;
 }
 
 export interface MemoryRetrievalOptions {

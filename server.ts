@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { isQuotaError, fallbackStatus, sequenceDialogueLines } from './src/utils/generation';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,7 +28,7 @@ interface ApiCallLog {
   timestamp: number;
   task: 'dialogue' | 'analyze' | 'event_impact' | 'generate_agent' | 'reflect';
   model: string;
-  status: 'gemini_success' | 'rate_limited_fallback' | 'quota_error_fallback';
+  status: 'gemini_success' | 'rate_limited_fallback' | 'quota_error_fallback' | 'procedural_fallback' | 'api_error_fallback';
   latencyMs: number;
   promptCharLength: number;
   approxTokens: number;
@@ -59,6 +60,9 @@ const apiMetrics = {
 };
 
 function recordApiCall(log: ApiCallLog) {
+  // Rule-generated text incurs no model token usage. Failed responses have no
+  // measurable output; the token totals remain successful-response estimates.
+  if (log.status !== 'gemini_success') log = { ...log, approxTokens: 0 };
   apiMetrics.totalCalls++;
   apiMetrics.taskBreakdown[log.task] = (apiMetrics.taskBreakdown[log.task] || 0) + 1;
   if (log.status === 'gemini_success') {
@@ -69,8 +73,10 @@ function recordApiCall(log: ApiCallLog) {
       apiMetrics.rateLimitHits++;
     }
   }
-  apiMetrics.totalPromptTokens += Math.round(log.approxTokens * 0.7);
-  apiMetrics.totalCandidateTokens += Math.round(log.approxTokens * 0.3);
+  if (log.status === 'gemini_success') {
+    apiMetrics.totalPromptTokens += Math.round(log.approxTokens * 0.7);
+    apiMetrics.totalCandidateTokens += Math.round(log.approxTokens * 0.3);
+  }
 
   apiMetrics.recentCalls.unshift(log);
   if (apiMetrics.recentCalls.length > 50) {
@@ -84,7 +90,7 @@ function isGeminiRateLimited(): boolean {
 
 function handleGeminiQuotaError(err: any, taskName: string) {
   const errMsg = String(err?.message || err);
-  const is429 = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Quota exceeded');
+  const is429 = isQuotaError(err);
   
   if (is429) {
     // 60-second cooldown period before retrying Gemini API
@@ -93,6 +99,7 @@ function handleGeminiQuotaError(err: any, taskName: string) {
   } else {
     console.warn(`[Gemini API Warning] ${taskName}:`, errMsg);
   }
+  return is429;
 }
 
 // ==========================================
@@ -104,9 +111,9 @@ app.get('/api/metrics/quota', (_req, res) => {
   
   // Calculate calls in last 60 seconds for live RPM
   const oneMinuteAgo = now - 60000;
-  const recent1mCalls = apiMetrics.recentCalls.filter(c => c.timestamp >= oneMinuteAgo).length;
+  const recent1mCalls = apiMetrics.recentCalls.filter(c => c.timestamp >= oneMinuteAgo && ['gemini_success', 'quota_error_fallback', 'api_error_fallback'].includes(c.status)).length;
   const recent1mTokens = apiMetrics.recentCalls
-    .filter(c => c.timestamp >= oneMinuteAgo)
+    .filter(c => c.timestamp >= oneMinuteAgo && c.status === 'gemini_success')
     .reduce((sum, c) => sum + c.approxTokens, 0);
 
   res.json({
@@ -138,13 +145,13 @@ app.post('/api/ai/dialogue', async (req, res) => {
       timestamp: Date.now(),
       task: 'dialogue',
       model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
-      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      status: fallbackStatus(Boolean(ai), isGeminiRateLimited()),
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 320,
       summary: `${agentA?.name} & ${agentB?.name} @ ${location?.name || '小镇'}: ${result.topic}`
     });
-    return res.json(result);
+    return res.json({ ...result, generation: { source: 'server_fallback', reason: !ai ? 'no_api_key' : 'quota', latencyMs: Date.now() - startTime } });
   }
 
   try {
@@ -235,22 +242,22 @@ ${agentBContext || '暂无对该居民的深刻历史往来，初次正常接触
       summary: `${agentA?.name} & ${agentB?.name}: ${parsed.topic || '偶遇交流'}`
     });
 
-    return res.json(parsed);
+    return res.json({ ...parsed, generation: { source: 'model', latencyMs: Date.now() - startTime } });
   } catch (err: any) {
-    handleGeminiQuotaError(err, 'Dialogue Generation');
+    const quotaError = handleGeminiQuotaError(err, 'Dialogue Generation');
     const result = generateProceduralDialogue(agentA, agentB, location, context, recentEvents);
     recordApiCall({
       id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       task: 'dialogue',
       model: 'procedural-fallback',
-      status: 'quota_error_fallback',
+      status: quotaError ? 'quota_error_fallback' : 'api_error_fallback',
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 280,
-      summary: `[配额熔断降级] ${agentA?.name} & ${agentB?.name}: ${result.topic}`
+      summary: `[规则备用] ${agentA?.name} & ${agentB?.name}: ${result.topic}`
     });
-    return res.json(result);
+    return res.json({ ...result, generation: { source: 'server_fallback', reason: quotaError ? 'quota' : 'api_error', latencyMs: Date.now() - startTime } });
   }
 });
 
@@ -269,13 +276,13 @@ app.post('/api/ai/reflect', async (req, res) => {
       timestamp: Date.now(),
       task: 'reflect',
       model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
-      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      status: fallbackStatus(Boolean(ai), isGeminiRateLimited()),
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 290,
       summary: `${agent?.name} 深度反思顿悟 (基准降级)`
     });
-    return res.json(result);
+    return res.json({ ...result, generation: { source: 'server_fallback', reason: !ai ? 'no_api_key' : 'quota', latencyMs: Date.now() - startTime } });
   }
 
   try {
@@ -343,22 +350,22 @@ ${memoriesText || '1. 今日在小镇正常工作，与邻里有日常交流。'
       summary: `${agent?.name} 形成深度反思: ${parsed.reflection?.slice(0, 20)}...`
     });
 
-    return res.json(parsed);
+    return res.json({ ...parsed, generation: { source: 'model', latencyMs: Date.now() - startTime } });
   } catch (err: any) {
-    handleGeminiQuotaError(err, 'Agent Reflection Generation');
+    const quotaError = handleGeminiQuotaError(err, 'Agent Reflection Generation');
     const result = generateProceduralReflection(agent, recentMemories);
     recordApiCall({
       id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       task: 'reflect',
       model: 'procedural-fallback',
-      status: 'quota_error_fallback',
+      status: quotaError ? 'quota_error_fallback' : 'api_error_fallback',
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 250,
       summary: `[降级] ${agent?.name} 深度反思顿悟`
     });
-    return res.json(result);
+    return res.json({ ...result, generation: { source: 'server_fallback', reason: quotaError ? 'quota' : 'api_error', latencyMs: Date.now() - startTime } });
   }
 });
 
@@ -377,7 +384,7 @@ app.post('/api/ai/analyze', async (req, res) => {
       timestamp: Date.now(),
       task: 'analyze',
       model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
-      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      status: fallbackStatus(Boolean(ai), isGeminiRateLimited()),
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 850,
@@ -466,14 +473,14 @@ ${recentEvents || '无重大外部冲击，居民自由活动'}
     });
     return res.json(parsed);
   } catch (err) {
-    handleGeminiQuotaError(err, 'Town Analysis');
+    const quotaError = handleGeminiQuotaError(err, 'Town Analysis');
     const result = generateProceduralAnalysis(interactions, agents);
     recordApiCall({
       id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       task: 'analyze',
       model: 'procedural-fallback',
-      status: 'quota_error_fallback',
+      status: quotaError ? 'quota_error_fallback' : 'api_error_fallback',
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 600,
@@ -506,7 +513,7 @@ app.post('/api/ai/event-impact', async (req, res) => {
       timestamp: Date.now(),
       task: 'event_impact',
       model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
-      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      status: fallbackStatus(Boolean(ai), isGeminiRateLimited()),
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 400,
@@ -561,7 +568,7 @@ ${(agents || []).map((a: any) => `${a.id}:${a.name}(${a.role}, MBTI:${a.mbti})`)
     });
     return res.json(parsed);
   } catch (err) {
-    handleGeminiQuotaError(err, 'Event Impact Analysis');
+    const quotaError = handleGeminiQuotaError(err, 'Event Impact Analysis');
     const result = {
       impactSummary: '事件已生效，正在小镇舆论中发酵。',
       agentReactions: (agents || []).map((a: any) => ({
@@ -576,7 +583,7 @@ ${(agents || []).map((a: any) => `${a.id}:${a.name}(${a.role}, MBTI:${a.mbti})`)
       timestamp: Date.now(),
       task: 'event_impact',
       model: 'procedural-fallback',
-      status: 'quota_error_fallback',
+      status: quotaError ? 'quota_error_fallback' : 'api_error_fallback',
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 350,
@@ -601,7 +608,7 @@ app.post('/api/ai/generate-agent', async (req, res) => {
       timestamp: Date.now(),
       task: 'generate_agent',
       model: isGeminiRateLimited() ? 'procedural-cooldown' : 'procedural-local',
-      status: isGeminiRateLimited() ? 'rate_limited_fallback' : 'gemini_success',
+      status: fallbackStatus(Boolean(ai), isGeminiRateLimited()),
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 300,
@@ -655,14 +662,14 @@ app.post('/api/ai/generate-agent', async (req, res) => {
     });
     return res.json(parsed);
   } catch (err) {
-    handleGeminiQuotaError(err, 'Agent Persona Generation');
+    const quotaError = handleGeminiQuotaError(err, 'Agent Persona Generation');
     const result = generateProceduralResident(req.body.promptHint);
     recordApiCall({
       id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       task: 'generate_agent',
       model: 'procedural-fallback',
-      status: 'quota_error_fallback',
+      status: quotaError ? 'quota_error_fallback' : 'api_error_fallback',
       latencyMs: Date.now() - startTime,
       promptCharLength: 0,
       approxTokens: 280,
@@ -682,7 +689,8 @@ function generateProceduralDialogue(agentA: any, agentB: any, location: any, con
   // Role and scenario tailored topics
   const scenarios = [
     {
-      topic: `${locName}关于${agentA.role || '日常'}的偶遇杂谈`,
+      topic: '近况与茶聚的闲聊',
+      summary: '分享工作近况，并提议找时间组织茶聚。',
       sentiment: 'positive',
       score: 0.65,
       lines: [
@@ -698,6 +706,7 @@ function generateProceduralDialogue(agentA: any, agentB: any, location: any, con
     },
     {
       topic: `关于小镇发展理念的轻微探讨`,
+      summary: '讨论事务安排带来的压力，愿意在议事时寻找平衡。',
       sentiment: 'conflict',
       score: -0.2,
       lines: [
@@ -713,6 +722,7 @@ function generateProceduralDialogue(agentA: any, agentB: any, location: any, con
     },
     {
       topic: `星空观测与典籍历史的遐想`,
+      summary: '分享星轨与古籍的想法，并约定一起去观星台复核。',
       sentiment: 'deep',
       score: 0.75,
       lines: [
@@ -728,6 +738,7 @@ function generateProceduralDialogue(agentA: any, agentB: any, location: any, con
     },
     {
       topic: `手作美食与草木香气的晨间分享`,
+      summary: '分享点心与花草茶，希望把好心情传递给街坊。',
       sentiment: 'collaborative',
       score: 0.8,
       lines: [
@@ -747,20 +758,10 @@ function generateProceduralDialogue(agentA: any, agentB: any, location: any, con
 
   return {
     topic: choice.topic,
-    summary: `${agentA.name} 与 ${agentB.name} 在 ${locName} 交流了关于“${choice.topic}”的想法。`,
+    summary: `${agentA.name} 与 ${agentB.name} 在 ${locName} ${choice.summary}`,
     sentiment: choice.sentiment,
     sentimentScore: choice.score,
-    dialogue: choice.lines.map(line => ({
-      speakerId: agentA.id,
-      speakerName: agentA.name,
-      text: line.a,
-      emotion: line.ea
-    })).concat(choice.lines.map(line => ({
-      speakerId: agentB.id,
-      speakerName: agentB.name,
-      text: line.b,
-      emotion: line.eb
-    }))).sort((_a, _b) => 0.5 - Math.random()).slice(0, 4),
+    dialogue: sequenceDialogueLines(choice.lines, agentA, agentB),
     affinityDeltaAtoB: choice.deltaA,
     affinityDeltaBtoA: choice.deltaB,
     memoryA: choice.memA,
