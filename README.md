@@ -84,7 +84,7 @@ Gemini 密钥仅用于服务端，请勿将密钥写入前端代码、截图、�
 
 ### Firebase 配置
 
-当前代码从 `firebase-applet-config.json` 读取 Firebase Web App 配置，并通过 `firestoreDatabaseId` 选择数据库。请使用自己项目的配置，不要使用或分享他人的云项目配置。该文件目前由 Git 跟踪，填写自己的配置前，应先调整仓库的配置加载和忽略方式，避免误提交。
+当前代码从 `firebase-applet-config.json` 读取 Firebase Web App 配置，并通过 `firestoreDatabaseId` 选择数据库。仓库里的这个文件只保留占位符。请换成你自己的 Firebase Web App 配置，并且不要把真实的 apiKey、OAuth Client ID、项目 ID 或数据库 ID 提交到 Git。
 
 仓库现有的 Firestore 规则允许未认证用户读取和写入部分集合。使用真实数据或公开部署前，请自行设计并验证认证、授权和数据库安全规则；修改本地规则文件不会自动更新云端配置。
 
