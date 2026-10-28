@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Agent, 
   Building, 
@@ -15,19 +15,21 @@ import {
   INITIAL_EVENTS, 
   INITIAL_ANALYSIS 
 } from './data/initialTownData';
-import { TownCanvas } from './components/TownCanvas';
+import { TownWorkspace } from './components/TownWorkspace';
+import { advanceClock, SIMULATION_STEP_MS, SIMULATION_STEP_MINUTES } from './utils/simulation';
+import { useLocalPersistence } from './utils/useLocalPersistence';
+import { useAgentObservations } from './utils/useAgentObservations';
 import { HeaderNav, TabKey } from './components/HeaderNav';
-import { DashboardOverview } from './components/DashboardOverview';
-import { LiveInteractionsView } from './components/LiveInteractionsView';
-import { AgentEvolutionView } from './components/AgentEvolutionView';
-import { AgentPersonaStudio } from './components/AgentPersonaStudio';
-import { InformationNetworkView } from './components/InformationNetworkView';
-import { TownEventsEngine } from './components/TownEventsEngine';
-import { TownAnalyzerView } from './components/TownAnalyzerView';
-import { AgentDetailModal } from './components/AgentDetailModal';
-import { FineTuningExportModal } from './components/FineTuningExportModal';
-import { QuotaCapacityPanel } from './components/QuotaCapacityPanel';
-import { TownEconomyPanel } from './components/TownEconomyPanel';
+const DashboardOverview = lazy(() => import('./components/DashboardOverview').then(module => ({ default: module.DashboardOverview })));
+const LiveInteractionsView = lazy(() => import('./components/LiveInteractionsView').then(module => ({ default: module.LiveInteractionsView })));
+const AgentEvolutionView = lazy(() => import('./components/AgentEvolutionView').then(module => ({ default: module.AgentEvolutionView })));
+const AgentPersonaStudio = lazy(() => import('./components/AgentPersonaStudio').then(module => ({ default: module.AgentPersonaStudio })));
+const InformationNetworkView = lazy(() => import('./components/InformationNetworkView').then(module => ({ default: module.InformationNetworkView })));
+const TownEventsEngine = lazy(() => import('./components/TownEventsEngine').then(module => ({ default: module.TownEventsEngine })));
+const TownAnalyzerView = lazy(() => import('./components/TownAnalyzerView').then(module => ({ default: module.TownAnalyzerView })));
+const FineTuningExportModal = lazy(() => import('./components/FineTuningExportModal').then(module => ({ default: module.FineTuningExportModal })));
+const QuotaCapacityPanel = lazy(() => import('./components/QuotaCapacityPanel').then(module => ({ default: module.QuotaCapacityPanel })));
+const TownEconomyPanel = lazy(() => import('./components/TownEconomyPanel').then(module => ({ default: module.TownEconomyPanel })));
 import { 
   testConnection, 
   syncInteractionToCloud, 
@@ -192,15 +194,14 @@ export default function App() {
   const [latestAnalysis, setLatestAnalysis] = useState<TownAnalysis>(INITIAL_ANALYSIS);
   const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>(loadStoredKnowledge);
   const [economyState, setEconomyState] = useState<TownEconomyState>(loadStoredEconomy);
+  const observations = useAgentObservations(agents, simDay, simHour, simMinute);
 
-  // Sync economy state to local storage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_ECONOMY, JSON.stringify(economyState));
-    } catch (e) {
-      // ignore
-    }
-  }, [economyState]);
+  useLocalPersistence(STORAGE_ECONOMY, economyState);
+  useLocalPersistence(STORAGE_AGENTS, agents);
+  const savedInteractions = useMemo(() => interactions.slice(0, 100), [interactions]);
+  useLocalPersistence(STORAGE_INTERACTIONS, savedInteractions);
+  useLocalPersistence(STORAGE_KNOWLEDGE, knowledgeItems);
+  useLocalPersistence(STORAGE_SIM_STATE, { simDay, simHour, simMinute, weather });
 
   // Active Conversations on Canvas
   const [activeBubbles, setActiveBubbles] = useState<ActiveInteractionBubble[]>([]);
@@ -229,16 +230,20 @@ export default function App() {
       color
     };
     setGameToasts(prev => [newToast, ...prev].slice(0, 4));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      activeTimersRef.current.delete(timer);
       setGameToasts(prev => prev.filter(t => t.id !== newToast.id));
-    }, 4000);
+    }, 3500);
+    activeTimersRef.current.add(timer);
   }, []);
 
   // Ref to track interacting agent IDs to prevent double encounters
   const interactingAgentIdsRef = useRef<Set<string>>(new Set());
 
   // Ref to throttle autonomous dialogue encounters to prevent rapid API exhaustion
-  const lastAutonomousEncounterRef = useRef<number>(0);
+  const lastAutonomousEncounterRef = useRef<number>(Date.now());
+  const dialogueHandlerRef = useRef<(a: Agent, b: Agent) => Promise<void>>(null);
+  const reflectionHandlerRef = useRef<(id: string) => Promise<void>>(null);
 
   // Debounce ref for syncing simulation clock to cloud
   const lastCloudClockSyncRef = useRef<number>(0);
@@ -297,10 +302,8 @@ export default function App() {
     };
   }, []);
 
-  // 1. Persist clock and weather immediately to LocalStorage and debounced to Firestore
+  // Debounced cloud clock sync; local snapshots are saved by useLocalPersistence.
   useEffect(() => {
-    localStorage.setItem(STORAGE_SIM_STATE, JSON.stringify({ simDay, simHour, simMinute, weather }));
-
     // Sync to Firestore every 30 simulated seconds or whenever the hour advances
     const now = Date.now();
     if (isCloudReady && (now - lastCloudClockSyncRef.current > 15000 || simMinute === 0)) {
@@ -309,35 +312,14 @@ export default function App() {
     }
   }, [simDay, simHour, simMinute, weather, isCloudReady]);
 
-  // Persist agents to LocalStorage whenever modified
-  useEffect(() => {
-    localStorage.setItem(STORAGE_AGENTS, JSON.stringify(agents));
-  }, [agents]);
-
-  // Persist interactions to LocalStorage whenever modified
-  useEffect(() => {
-    if (interactions.length > 0) {
-      localStorage.setItem(STORAGE_INTERACTIONS, JSON.stringify(interactions.slice(0, 100)));
-    }
-  }, [interactions]);
-
-  // Persist knowledge items to LocalStorage whenever modified
-  useEffect(() => {
-    if (knowledgeItems.length > 0) {
-      localStorage.setItem(STORAGE_KNOWLEDGE, JSON.stringify(knowledgeItems));
-    }
-  }, [knowledgeItems]);
-
   // Synchronize on beforeunload
   useEffect(() => {
     const handleBeforeUnload = () => {
-      localStorage.setItem(STORAGE_SIM_STATE, JSON.stringify({ simDay, simHour, simMinute, weather }));
-      localStorage.setItem(STORAGE_KNOWLEDGE, JSON.stringify(knowledgeItems));
       syncSimulationStateToCloud({ simDay, simHour, simMinute, weather });
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [simDay, simHour, simMinute, weather, knowledgeItems]);
+  }, [simDay, simHour, simMinute, weather]);
 
   // Idempotency refs for StrictMode initialization
   const isBootingRef = useRef<boolean>(false);
@@ -525,18 +507,14 @@ export default function App() {
 
   // Evening reflection: at 22:00, pick an agent with memories to synthesize daily reflection
   const triggerEveningReflection = useCallback(() => {
-    setAgents(currentAgents => {
-      const candidates = currentAgents.filter(a => (a.memories || []).length >= 3);
-      if (candidates.length > 0) {
-        const picked = candidates[Math.floor(Math.random() * candidates.length)];
-        const timer = setTimeout(() => {
-          activeTimersRef.current.delete(timer);
-          handleTriggerAgentReflection(picked.id);
-        }, 1200);
-        activeTimersRef.current.add(timer);
-      }
-      return currentAgents;
-    });
+    const candidates = agentsRef.current.filter(a => (a.memories || []).length >= 3);
+    if (!candidates.length) return;
+    const picked = candidates[Math.floor(Math.random() * candidates.length)];
+    const timer = setTimeout(() => {
+      activeTimersRef.current.delete(timer);
+      reflectionHandlerRef.current?.(picked.id);
+    }, 1200);
+    activeTimersRef.current.add(timer);
   }, []);
 
   // Agent Step & Autonomous Behavior Cycle (Needs -> Goal -> Plan -> Action)
@@ -546,74 +524,45 @@ export default function App() {
     const curHour = stepHour ?? simClockRef.current.hour;
     const curMin = stepMin ?? simClockRef.current.minute;
     const timeStr = `${String(curHour).padStart(2, '0')}:${String(curMin).padStart(2, '0')}`;
-    const { buildings, weather, events, activeBubbles } = simStateRef.current;
+    const { buildings, weather, events } = simStateRef.current;
+    const previous = agentsRef.current;
+    const updated = previous.map(agent => tickAgentAutonomousBehavior(
+      agent, SIMULATION_STEP_MINUTES, buildings, previous, curDay, timeStr, weather,
+      interactingAgentIdsRef.current.has(agent.id), events
+    ));
+    agentsRef.current = updated;
+    setAgents(updated);
 
-    setAgents(prevAgents => {
-      const updated = prevAgents.map(agent => {
-        const isInteracting = interactingAgentIdsRef.current.has(agent.id);
-        return tickAgentAutonomousBehavior(
-          agent,
-          1, // 1 simulation minute per tick
-          buildings,
-          prevAgents,
-          curDay,
-          timeStr,
-          weather,
-          isInteracting,
-          events
-        );
-      });
-
-      agentsRef.current = updated;
-
-      // Proximity encounter trigger: check if two agents are close (< 45px) and not chatting
-      // Throttle autonomous dialogues to at least 15s apart so quota is preserved and simulation feels natural
-      const now = Date.now();
-      if (now - lastAutonomousEncounterRef.current > 15000 && activeBubbles.length === 0) {
-        for (let i = 0; i < updated.length; i++) {
-          for (let j = i + 1; j < updated.length; j++) {
-            const a = updated[i];
-            const b = updated[j];
-
-            if (
-              !interactingAgentIdsRef.current.has(a.id) &&
-              !interactingAgentIdsRef.current.has(b.id)
-            ) {
-              const distance = Math.hypot(a.x - b.x, a.y - b.y);
-              if (distance < 45 && Math.random() < 0.4) {
-                lastAutonomousEncounterRef.current = now;
-                // Trigger autonomous encounter!
-                triggerAutonomousDialogue(a, b);
-                return updated;
-              }
-            }
-          }
+    // Keep network requests outside React state updaters. Even at 5×, the
+    // real-time cooldown remains 15 seconds and only one encounter runs at once.
+    const now = Date.now();
+    if (now - lastAutonomousEncounterRef.current <= 15000 || interactingAgentIdsRef.current.size > 0) return;
+    for (let i = 0; i < updated.length; i++) {
+      for (let j = i + 1; j < updated.length; j++) {
+        const a = updated[i], b = updated[j];
+        if (Math.hypot(a.x - b.x, a.y - b.y) < 45 && Math.random() < 0.4) {
+          lastAutonomousEncounterRef.current = now;
+          void dialogueHandlerRef.current?.(a, b);
+          return;
         }
       }
-
-      return updated;
-    });
+    }
   }, []);
 
-  // 2. Main Simulation Controller (Single requestAnimationFrame loop)
-  // Replaces multiple intervals with a high-efficiency RAF controller.
-  // Benefits:
-  // - 0% CPU consumption when browser tab is inactive/backgrounded (auto-throttled by browser)
-  // - Fixed timestep accumulator guarantees deterministic tick cadence
-  // - Clamping delta to 2000ms and capping substeps to 4 prevents "spiral of death" and memory buildup
-  // - Only restarts when simSpeed changes, eliminating timer churn and garbage collection spikes
+  // Fixed steps share the same elapsed minutes across clock, needs and movement.
+  // Pause hidden tabs and cap catch-up work after a slow frame.
   useEffect(() => {
     if (simSpeed === 0) return;
 
     let rafId: number | null = null;
     let lastTime: number = performance.now();
     let accumulator: number = 0;
-    const intervalTime = 1000 / simSpeed;
+    const intervalTime = SIMULATION_STEP_MS / simSpeed;
     const maxSubsteps = 4; // Prevent spiral of death when returning from background tabs
 
     const loop = (currentTime: number) => {
-      // Calculate delta time, capping at 2000ms to avoid huge catch-up bursts if tab was hidden
-      const delta = Math.min(currentTime - lastTime, 2000);
+      // Avoid advancing a large amount of simulation time after returning to the tab.
+      const delta = document.hidden ? 0 : Math.min(currentTime - lastTime, 250);
       lastTime = currentTime;
       accumulator += delta;
 
@@ -624,15 +573,10 @@ export default function App() {
         logger.recordMetric('simulationTicks', 1);
 
         // Advance simulation clock
-        simClockRef.current.minute += 5;
-        if (simClockRef.current.minute >= 60) {
-          simClockRef.current.minute = 0;
-          simClockRef.current.hour += 1;
-          if (simClockRef.current.hour >= 24) {
-            simClockRef.current.hour = 0;
-            simClockRef.current.day += 1;
-            setSimDay(simClockRef.current.day);
-          }
+        const previousHour = simClockRef.current.hour;
+        simClockRef.current = advanceClock(simClockRef.current, SIMULATION_STEP_MINUTES);
+        if (simClockRef.current.hour !== previousHour) {
+          setSimDay(simClockRef.current.day);
           const curHour = simClockRef.current.hour;
           setSimHour(curHour);
 
@@ -695,6 +639,7 @@ export default function App() {
     // Mark both agents as occupied
     interactingAgentIdsRef.current.add(agentA.id);
     interactingAgentIdsRef.current.add(agentB.id);
+    setAgents(previous => previous.map(agent => agent.id === agentA.id || agent.id === agentB.id ? { ...agent, isMoving: false } : agent));
 
     // Find nearest building
     let nearestBuilding = buildings[0];
@@ -722,7 +667,8 @@ export default function App() {
       speakerName: agentA.name,
       currentSpeech: `💬 ${agentA.name} 与 ${agentB.name} 驻足相视...`,
       sentiment: 'neutral',
-      progress: 0
+      progress: 0,
+      phase: 'generating'
     };
 
     setActiveBubbles(prev => [...prev, initialBubble]);
@@ -764,10 +710,20 @@ export default function App() {
       );
 
       // Play through dialogue lines sequentially on canvas bubble
-      let lineIdx = 0;
+      const showLine = (line: typeof dialogueResult.dialogue[number]) => {
+        setActiveBubbles(prev => prev.map(b => b.id === bubbleId ? {
+          ...b, topic: dialogueResult.topic, speakerName: line.speakerName,
+          currentSpeech: line.text, sentiment: dialogueResult.sentiment,
+          phase: 'speaking', progress: 100 / dialogueResult.dialogue.length,
+          ...(dialogueResult.generation ? { generation: dialogueResult.generation } : {})
+        } : b));
+      };
+      if (dialogueResult.dialogue[0]) showLine(dialogueResult.dialogue[0]);
+      let lineIdx = 1;
       const speechInterval = setInterval(() => {
         if (lineIdx < dialogueResult.dialogue.length) {
           const line = dialogueResult.dialogue[lineIdx];
+          const lineProgress = (lineIdx + 1) / dialogueResult.dialogue.length * 100;
           setActiveBubbles(prev =>
             prev.map(b =>
               b.id === bubbleId
@@ -776,7 +732,8 @@ export default function App() {
                     topic: dialogueResult.topic,
                     speakerName: line.speakerName,
                     currentSpeech: line.text,
-                    sentiment: dialogueResult.sentiment
+                    sentiment: dialogueResult.sentiment,
+                    progress: lineProgress
                   }
                 : b
             )
@@ -786,6 +743,7 @@ export default function App() {
           // Finished conversation
           clearInterval(speechInterval);
           activeTimersRef.current.delete(speechInterval);
+          setActiveBubbles(prev => prev.map(bubble => bubble.id === bubbleId ? { ...bubble, phase: 'finished', progress: 100 } : bubble));
 
           // Remove bubble after a short pause
           const cleanupTimer = setTimeout(() => {
@@ -796,7 +754,7 @@ export default function App() {
           }, 2000);
           activeTimersRef.current.add(cleanupTimer);
         }
-      }, 2500);
+      }, Math.max(700, 1600 / Math.max(1, simStateRef.current.simSpeed)));
       activeTimersRef.current.add(speechInterval);
 
       // Construct complete InteractionRecord
@@ -845,21 +803,22 @@ export default function App() {
         messages: dialogueResult.dialogue,
         relationshipImpact: {
           [agentA.id]: { 
-            deltaAffinity: dialogueResult.affinityDeltaAtoB, 
+            deltaAffinity: calculateAffinityProjection(relOutcome.updatedRelAtoB) - (agentA.affinity?.[agentB.id] ?? 0),
             stage: relOutcome.updatedRelAtoB.relationshipStage,
             dynamic: relOutcome.updatedRelAtoB.dominantDynamic,
             ...(relOutcome.stageTransitionAtoB ? { stageTransition: relOutcome.stageTransitionAtoB } : {}),
             note: dialogueResult.memoryA 
           },
           [agentB.id]: { 
-            deltaAffinity: dialogueResult.affinityDeltaBtoA, 
+            deltaAffinity: calculateAffinityProjection(relOutcome.updatedRelBtoA) - (agentB.affinity?.[agentA.id] ?? 0),
             stage: relOutcome.updatedRelBtoA.relationshipStage,
             dynamic: relOutcome.updatedRelBtoA.dominantDynamic,
             ...(relOutcome.stageTransitionBtoA ? { stageTransition: relOutcome.stageTransitionBtoA } : {}),
             note: dialogueResult.memoryB 
           }
         },
-        tags: [nearestBuilding.name, dialogueResult.sentiment]
+        tags: [nearestBuilding.name, dialogueResult.sentiment],
+        ...(dialogueResult.generation ? { generation: dialogueResult.generation } : {})
       };
 
       // Update State: Add Interaction Record
@@ -971,7 +930,8 @@ export default function App() {
       // Async Persistent Save to Firebase Firestore!
       syncInteractionToCloud(newRecord);
       setCloudSyncCount(c => c + 1);
-      addGameToast('❤️ +5 羁绊提升', `${agentA.name} 与 ${agentB.name} 触碰了彼此心声`, '❤️', '#f28cb1');
+      const formatChange = (delta: number) => `${delta > 0 ? '+' : ''}${delta}`;
+      addGameToast('对话已记录', `${agentA.name} 好感 ${formatChange(newRecord.relationshipImpact[agentA.id].deltaAffinity)} · ${agentB.name} 好感 ${formatChange(newRecord.relationshipImpact[agentB.id].deltaAffinity)}`, '💬', '#9be0c9');
 
     } catch (err) {
       console.error('Encounter execution error:', err);
@@ -980,6 +940,8 @@ export default function App() {
       interactingAgentIdsRef.current.delete(agentB.id);
     }
   };
+
+  dialogueHandlerRef.current = triggerAutonomousDialogue;
 
   // 3.5. Trigger Agent Long-Term Reflection & Memory Consolidation
   const handleTriggerAgentReflection = async (agentId: string) => {
@@ -1011,15 +973,18 @@ export default function App() {
     }
   };
 
+  reflectionHandlerRef.current = handleTriggerAgentReflection;
+
   // 4. Force Dialogue Trigger (e.g. from UI inspector)
   const handleForceInteraction = (agentId: string) => {
     const agentA = agents.find(a => a.id === agentId);
     if (!agentA) return;
+    if (interactingAgentIdsRef.current.has(agentId)) return;
 
-    // Pick closest or random other resident
-    const otherAgents = agents.filter(a => a.id !== agentId);
+    // Choose the nearest available neighbor for a predictable intervention.
+    const otherAgents = agents.filter(a => a.id !== agentId && !interactingAgentIdsRef.current.has(a.id));
     if (otherAgents.length === 0) return;
-    const agentB = otherAgents[Math.floor(Math.random() * otherAgents.length)];
+    const agentB = otherAgents.reduce((nearest, candidate) => Math.hypot(candidate.x - agentA.x, candidate.y - agentA.y) < Math.hypot(nearest.x - agentA.x, nearest.y - agentA.y) ? candidate : nearest);
 
     // Move them toward each other
     setAgents(prev =>
@@ -1031,11 +996,11 @@ export default function App() {
     );
 
     triggerAutonomousDialogue(agentA, agentB);
-    setSelectedAgentId(null);
   };
 
   // 5. Trigger Custom Event Intervention
   const handleTriggerEvent = (event: TownEvent, agentReactions: any[]) => {
+    event = { ...event, simDay };
     setEvents(prev => [event, ...prev]);
     syncEventToCloud(event);
     addGameToast('⚡ 奇遇降临', `【${event.title}】正在席卷小镇！`, '⚡', '#f7a76c');
@@ -1144,10 +1109,12 @@ export default function App() {
 
   // Skip one hour shortcut
   const handleSkipHour = () => {
-    const nextH = (simClockRef.current.hour + 1) % 24;
-    simClockRef.current.hour = nextH;
-    setSimHour(nextH);
-    updateAgentsStep(simClockRef.current.day, nextH, simClockRef.current.minute);
+    const next = advanceClock(simClockRef.current, 60);
+    simClockRef.current = next;
+    setSimDay(next.day);
+    setSimHour(next.hour);
+    setSimMinute(next.minute);
+    updateAgentsStep(next.day, next.hour, next.minute);
     soundEngine.playClick();
   };
 
@@ -1159,7 +1126,6 @@ export default function App() {
       setSimHour(8);
       setSimMinute(0);
       setWeather('clear');
-      localStorage.setItem(STORAGE_SIM_STATE, JSON.stringify({ simDay: 1, simHour: 8, simMinute: 0, weather: 'clear' }));
       syncSimulationStateToCloud({ simDay: 1, simHour: 8, simMinute: 0, weather: 'clear' });
       soundEngine.playClick();
     }
@@ -1179,19 +1145,8 @@ export default function App() {
     soundEngine.playClick();
   };
 
-  const selectedAgentObj = agents.find(a => a.id === selectedAgentId) || null;
-  const selectedBuildingObj = buildings.find(b => b.id === selectedBuildingId) || null;
-
-  const getEnvironmentAtmosphere = () => {
-    if (weather === 'rainy') return 'bg-[#151d30]';
-    if (weather === 'starry_night' || simHour >= 20 || simHour < 5) return 'bg-[#131a2e]';
-    if (simHour >= 5 && simHour < 8) return 'bg-[#1a233b]';
-    if (simHour >= 17 && simHour < 20) return 'bg-[#1f1c36]';
-    return 'bg-[#151d33]';
-  };
-
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden font-sans text-[#f8f2e7] transition-colors duration-700 ${getEnvironmentAtmosphere()}`}>
+    <div className="town-app flex flex-col w-full overflow-hidden">
       {/* Top Global Navigation Bar */}
       <HeaderNav
         currentTab={currentTab}
@@ -1211,34 +1166,19 @@ export default function App() {
       />
 
       {/* Main Tab View Port */}
-      <main className="flex-1 relative overflow-hidden">
+      <main className="flex-1 min-h-0 relative overflow-hidden">
+        <Suspense fallback={<div className="town-loading" role="status">正在打开…</div>}>
         {currentTab === 'canvas' && (
-          <div className="relative w-full h-full">
-            <TownCanvas
-              agents={agents}
-              buildings={buildings}
-              selectedAgentId={selectedAgentId}
-              onSelectAgent={setSelectedAgentId}
-              selectedBuildingId={selectedBuildingId}
-              onSelectBuilding={setSelectedBuildingId}
-              activeInteractions={activeBubbles}
-              simHour={simHour}
-              simMinute={simMinute}
-              weather={weather}
-            />
-
-            {/* Quick Inspect Drawer for Selected Agent */}
-            <AgentDetailModal
-              agent={selectedAgentObj}
-              building={selectedBuildingObj}
-              onClose={() => setSelectedAgentId(null)}
-              onGoToEvolution={agentId => {
-                setSelectedAgentId(agentId);
-                setCurrentTab('evolution');
-              }}
-              onForceInteraction={handleForceInteraction}
-            />
-          </div>
+          <TownWorkspace
+            agents={agents} buildings={buildings} interactions={interactions} events={events} observations={observations}
+            selectedAgentId={selectedAgentId} onSelectAgent={setSelectedAgentId}
+            selectedBuildingId={selectedBuildingId} onSelectBuilding={setSelectedBuildingId}
+            activeInteractions={activeBubbles} simDay={simDay} simHour={simHour} simMinute={simMinute}
+            simSpeed={simSpeed} weather={weather}
+            onOpenAgent={id => { setSelectedAgentId(id); setCurrentTab('evolution'); }}
+            onForceInteraction={handleForceInteraction}
+            onOpenDialogues={() => setCurrentTab('dialogues')}
+          />
         )}
 
         {currentTab === 'dashboard' && (
@@ -1366,8 +1306,9 @@ export default function App() {
           />
         )}
 
+        </Suspense>
         {/* Floating RPG Game Feedback Toasts */}
-        <div className="fixed top-16 right-6 z-50 pointer-events-none space-y-2.5 max-w-sm">
+        <div aria-live="polite" className="fixed bottom-6 right-6 z-50 pointer-events-none space-y-2.5 max-w-sm">
           {gameToasts.map(toast => (
             <div
               key={toast.id}
@@ -1384,22 +1325,22 @@ export default function App() {
       </main>
 
       {/* Model Fine-Tuning Exporter Modal */}
-      <FineTuningExportModal
+      {isExportModalOpen && <Suspense fallback={null}><FineTuningExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         interactions={interactions}
         agents={agents}
-      />
+      /></Suspense>}
 
       {/* Development Diagnostics HUD (Bottom-Left) */}
-      <DebugMetricsHUD
+      {import.meta.env.DEV && new URLSearchParams(window.location.search).get('debug') === '1' && <DebugMetricsHUD
         agentCount={agents.length}
         activeBubblesCount={activeBubbles.length}
         simDay={simDay}
         simHour={simHour}
         simMinute={simMinute}
         isCloudReady={isCloudReady}
-      />
+      />}
     </div>
   );
 }

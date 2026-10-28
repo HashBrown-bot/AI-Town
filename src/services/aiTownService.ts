@@ -1,4 +1,4 @@
-import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult } from '../types/town';
+import { Agent, Building, InteractionRecord, TownEvent, TownAnalysis, AgentMemory, ReflectionResult, GenerationInfo } from '../types/town';
 import { logger } from '../utils/logger';
 
 export async function requestAgentDialogue(
@@ -20,9 +20,12 @@ export async function requestAgentDialogue(
   memoryB: string;
   importance?: number;
   emotionalIntensity?: number;
+  generation?: GenerationInfo;
 }> {
+  const started = performance.now();
   try {
     const res = await fetch('/api/ai/dialogue', {
+      signal: AbortSignal.timeout(12000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -83,7 +86,8 @@ export async function requestAgentDialogue(
       memoryA: `在${location.name}见到了${agentB.name}，两人聊得很愉快。`,
       memoryB: `在${location.name}与${agentA.name}寒暄，感受到了积极的气息。`,
       importance: 6,
-      emotionalIntensity: 5
+      emotionalIntensity: 5,
+      generation: { source: 'client_fallback', reason: 'request_error', latencyMs: Math.round(performance.now() - started) }
     };
   }
 }
@@ -96,6 +100,7 @@ export async function requestAgentReflection(
 ): Promise<ReflectionResult> {
   try {
     const res = await fetch('/api/ai/reflect', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,6 +139,7 @@ export async function requestTownAnalysis(
 ): Promise<TownAnalysis> {
   try {
     const res = await fetch('/api/ai/analyze', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -209,6 +215,7 @@ export async function requestEventImpact(
 }> {
   try {
     const res = await fetch('/api/ai/event-impact', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event, agents })
@@ -232,6 +239,7 @@ export async function requestEventImpact(
 export async function generateNewAgentPersona(hint: string): Promise<Partial<Agent>> {
   try {
     const res = await fetch('/api/ai/generate-agent', {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ promptHint: hint })

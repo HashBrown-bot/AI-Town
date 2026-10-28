@@ -1,23 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { InteractionRecord, Agent } from '../types/town';
-import { 
-  MessageSquare, 
-  Search, 
-  Filter, 
-  Download, 
-  ChevronDown, 
-  ChevronUp, 
-  Sparkles, 
-  Heart, 
-  Flame, 
-  Coffee, 
-  BrainCircuit, 
-  Clock, 
-  MapPin, 
-  ArrowRight,
-  Database,
-  Check
-} from 'lucide-react';
+import { MessageSquare, Search, Download, MapPin, ArrowUpRight, ArrowLeft, Heart, Sparkles } from 'lucide-react';
+import { generationLabel } from '../utils/observation';
 
 interface LiveInteractionsViewProps {
   interactions: InteractionRecord[];
@@ -25,304 +9,41 @@ interface LiveInteractionsViewProps {
   onSelectAgent: (id: string) => void;
   onOpenFineTuningExport: () => void;
 }
+const sentiments = { positive: '温馨', deep: '深入交流', conflict: '分歧', collaborative: '协作', neutral: '闲聊' };
 
-export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({
-  interactions,
-  agents,
-  onSelectAgent,
-  onOpenFineTuningExport
-}) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>('all');
-  const [selectedSentimentFilter, setSelectedSentimentFilter] = useState<string>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(interactions[0]?.id || null);
-
-  const filteredInteractions = interactions.filter(i => {
-    const matchesSearch = 
-      i.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.participantNames.some(name => name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      i.location.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesAgent = 
-      selectedAgentFilter === 'all' || 
-      i.participants.includes(selectedAgentFilter);
-
-    const matchesSentiment = 
-      selectedSentimentFilter === 'all' || 
-      i.sentiment === selectedSentimentFilter;
-
-    return matchesSearch && matchesAgent && matchesSentiment;
+export const LiveInteractionsView: React.FC<LiveInteractionsViewProps> = ({ interactions, agents, onSelectAgent, onOpenFineTuningExport }) => {
+  const [search, setSearch] = useState('');
+  const [person, setPerson] = useState('all');
+  const [tone, setTone] = useState('all');
+  const [selectedId, setSelectedId] = useState<string | null>(interactions[0]?.id || null);
+  const [cutoff, setCutoff] = useState(() => Date.now());
+  const [limit, setLimit] = useState(40);
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const matches = interactions.filter(record => {
+    const text = `${record.topic} ${record.summary} ${record.participantNames.join(' ')} ${record.location}`.toLowerCase();
+    return text.includes(search.trim().toLowerCase()) && (person === 'all' || record.participants.includes(person)) && (tone === 'all' || record.sentiment === tone);
   });
+  const records = matches.filter(record => record.timestamp <= cutoff);
+  const newCount = matches.length - records.length;
+  const selected = records.find(record => record.id === selectedId) || records[0];
+  const messages = selected?.messages?.filter(message => typeof message.text === 'string' && message.text.trim()) || [];
+  const select = (id: string) => { setSelectedId(id); setMobileDetail(true); detailRef.current?.scrollTo({ top: 0 }); };
 
-  const getSentimentBadge = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive':
-        return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <Heart className="w-3 h-3" /> 和睦温馨
-          </span>
-        );
-      case 'deep':
-        return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <BrainCircuit className="w-3 h-3" /> 深度研讨
-          </span>
-        );
-      case 'conflict':
-        return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <Flame className="w-3 h-3" /> 观念争辩
-          </span>
-        );
-      case 'collaborative':
-        return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <Coffee className="w-3 h-3" /> 协作交流
-          </span>
-        );
-      default:
-        return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-            中性闲聊
-          </span>
-        );
-    }
-  };
-
-  return (
-    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 text-[#f8f2e7] max-w-7xl mx-auto">
-      {/* View Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#344672]/30">
-        <div>
-          <h2 className="text-xl font-bold text-[#f8f2e7] tracking-tight flex items-center gap-2">
-            <span>小镇心声与实时交谈实录</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#ffb86b]/15 text-[#ffc97a] border border-[#ffb86b]/30 font-mono">
-              Live Encounters
-            </span>
-          </h2>
-          <p className="text-xs text-[#c9c5d1] mt-1">
-            追踪居民间的自主交谈实录、情感微表情、话题演化及好感度流动轨迹
-          </p>
-        </div>
-
-        <button
-          onClick={onOpenFineTuningExport}
-          className="game-btn-secondary px-4 py-2 rounded-xl text-xs flex items-center gap-2 self-start md:self-auto"
-        >
-          <Download className="w-3.5 h-3.5 text-[#ffc97a]" />
-          <span>导出物语训练集 (JSONL)</span>
-        </button>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center gap-3 game-panel p-3.5">
-        {/* Search Input */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-[#8f93a8] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="搜索话题、居民姓名或偶遇地点..."
-            className="w-full bg-[#17223b] border border-[#344672]/40 rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#f8f2e7] placeholder-[#8f93a8] focus:outline-none focus:border-[#ffc97a]/50 transition"
-          />
-        </div>
-
-        {/* Agent Filter */}
-        <div className="flex items-center gap-1.5">
-          <Filter className="w-3.5 h-3.5 text-[#8f93a8]" />
-          <select
-            value={selectedAgentFilter}
-            onChange={e => setSelectedAgentFilter(e.target.value)}
-            className="bg-[#17223b] border border-[#344672]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#f8f2e7] focus:outline-none focus:border-[#ffc97a]/50 transition"
-          >
-            <option value="all">所有居民</option>
-            {agents.map(a => (
-              <option key={a.id} value={a.id}>{a.name} ({a.role})</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Sentiment Filter */}
-        <div>
-          <select
-            value={selectedSentimentFilter}
-            onChange={e => setSelectedSentimentFilter(e.target.value)}
-            className="bg-[#17223b] border border-[#344672]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#f8f2e7] focus:outline-none focus:border-[#ffc97a]/50 transition"
-          >
-            <option value="all">全部情感基调</option>
-            <option value="positive">和睦温馨</option>
-            <option value="deep">深度研讨</option>
-            <option value="conflict">观念争辩</option>
-            <option value="collaborative">协作交流</option>
-          </select>
-        </div>
-
-        <div className="text-xs text-slate-500 font-mono ml-auto">
-          匹配到 <span className="text-slate-200 font-semibold">{filteredInteractions.length}</span> 条交互
-        </div>
-      </div>
-
-      {/* Interactions Feed */}
-      <div className="space-y-4">
-        {filteredInteractions.length === 0 ? (
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-12 text-center text-slate-500 text-xs">
-            没有找到符合筛选条件的交互记录
-          </div>
-        ) : (
-          filteredInteractions.map(record => {
-            const isExpanded = expandedId === record.id;
-
-            return (
-              <div
-                key={record.id}
-                className="game-panel overflow-hidden transition hover:border-[#ffc97a]/40 shadow-sm"
-              >
-                {/* Collapsed Header / Summary Card */}
-                <div
-                  onClick={() => setExpandedId(isExpanded ? null : record.id)}
-                  className="p-4 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#202b46]/50 hover:bg-[#273552]/60 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#2a385c] border border-white/10 flex items-center justify-center shrink-0">
-                      <MessageSquare className="w-4 h-4 text-[#ffc97a]" />
-                    </div>
-
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-sm text-[#f8f2e7]">
-                          {record.topic}
-                        </span>
-                        {getSentimentBadge(record.sentiment)}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-[#c9c5d1] mt-1">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-[#ffc97a]" />
-                          <span>{record.location}</span>
-                        </span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1 font-mono">
-                          <Clock className="w-3 h-3 text-[#8f93a8]" />
-                          <span>第 {record.simDay} 天 {record.simTime}</span>
-                        </span>
-                        <span>·</span>
-                        <span className="text-[#fff1d6] font-semibold">
-                          {record.participantNames.join(' 与 ')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 self-end md:self-auto">
-                    {/* Affinity Impact Preview */}
-                    <div className="flex items-center gap-1.5 text-xs font-mono">
-                      {Object.entries(record.relationshipImpact || {}).map(([agentId, impact]) => {
-                        const agent = agents.find(a => a.id === agentId);
-                        const isPositive = impact.deltaAffinity >= 0;
-                        return (
-                          <span
-                            key={agentId}
-                            className={`px-2 py-0.5 rounded text-[11px] ${
-                              isPositive
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            }`}
-                          >
-                            {agent?.name || '居民'}: {isPositive ? `+${impact.deltaAffinity}` : impact.deltaAffinity}
-                          </span>
-                        );
-                      })}
-                    </div>
-
-                    <div className="text-slate-400 p-1">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded Details: Full Dialogue Transcript & Cognition */}
-                {isExpanded && (
-                  <div className="px-5 pb-5 pt-3 border-t border-[#344672]/30 bg-[#17223b]/60 space-y-4">
-                    {/* One-sentence executive narrative */}
-                    <div className="p-3 rounded-xl bg-[#202b46]/80 border border-[#344672]/40 text-xs text-[#c9c5d1]">
-                      <span className="text-[#ffc97a] font-mono uppercase mr-2 font-semibold">【奇遇概要】</span>
-                      {record.summary}
-                    </div>
-
-                    {/* Chat Bubble Transcript */}
-                    <div className="space-y-3 pl-2">
-                      <div className="text-[11px] font-medium text-[#c9c5d1] uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#ffc97a]" />
-                        <span>完整互动原录逐句追踪</span>
-                      </div>
-
-                      {record.messages?.map((msg, idx) => {
-                        const isFirstSpeaker = msg.speakerId === record.participants[0];
-                        const speakerAgent = agents.find(a => a.id === msg.speakerId);
-
-                        return (
-                          <div
-                            key={idx}
-                            className={`flex flex-col ${isFirstSpeaker ? 'items-start' : 'items-end'}`}
-                          >
-                            <div className="flex items-center gap-2 mb-1 text-[11px] text-[#8f93a8]">
-                              <span 
-                                onClick={() => onSelectAgent(msg.speakerId)}
-                                className="font-semibold text-[#f8f2e7] hover:text-[#ffc97a] cursor-pointer transition"
-                              >
-                                {msg.speakerName}
-                              </span>
-                              <span className="px-1.5 py-0.2 rounded-full bg-[#202b46] text-[10px] text-[#c9c5d1] border border-white/5 font-mono">
-                                情感: {msg.emotion}
-                              </span>
-                            </div>
-
-                            <div
-                              className={`max-w-[85%] sm:max-w-[70%] p-3.5 rounded-2xl text-xs leading-relaxed ${
-                                isFirstSpeaker
-                                  ? 'bg-[#273552] text-[#f8f2e7] rounded-tl-sm border border-[#41537e]/40 shadow-sm'
-                                  : 'bg-[#ffb86b]/15 text-[#fff1d6] rounded-tr-sm border border-[#ffb86b]/30 shadow-sm'
-                              }`}
-                            >
-                              {msg.text}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Relationship Impact & Memory Generation */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#344672]/30">
-                      {Object.entries(record.relationshipImpact || {}).map(([agentId, impact]) => {
-                        const agent = agents.find(a => a.id === agentId);
-                        return (
-                          <div
-                            key={agentId}
-                            className="p-3 rounded-xl bg-[#202b46]/70 border border-[#344672]/30 text-xs"
-                          >
-                            <div className="font-semibold text-[#f8f2e7] flex items-center gap-1.5">
-                              <Heart className="w-3 h-3 text-[#f28cb1]" />
-                              <span>{agent?.name} 心理回响：</span>
-                            </div>
-                            <div className="text-[11px] text-[#c9c5d1] mt-1">
-                              好感度变动: <b className={impact.deltaAffinity >= 0 ? 'text-[#71c68b]' : 'text-[#f28cb1]'}>
-                                {impact.deltaAffinity >= 0 ? `+${impact.deltaAffinity}` : impact.deltaAffinity}
-                              </b>
-                              {impact.note && ` (${impact.note})`}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+  return <div className={`town-dialogues-page ${mobileDetail && selected ? 'reading-detail' : ''}`}>
+    <div className="town-dialogues-heading"><div><span className="town-eyebrow">CONVERSATIONS / SHARED MOMENTS</span><h2>对话里的变化</h2><p>先读摘要，再看原文与关系变化。</p></div><button className="town-export-button" onClick={onOpenFineTuningExport}><Download size={15} />导出对话</button></div>
+    <div className="town-dialogues-toolbar"><div className="town-search"><Search size={16} /><input aria-label="搜索对话" placeholder="搜索话题、居民或地点" value={search} onChange={event => { setSearch(event.target.value); setLimit(40); }} /></div><select aria-label="对话居民" value={person} onChange={event => { setPerson(event.target.value); setLimit(40); }}><option value="all">全部居民</option>{agents.map(agent => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select><select aria-label="对话氛围" value={tone} onChange={event => { setTone(event.target.value); setLimit(40); }}><option value="all">全部氛围</option>{Object.entries(sentiments).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select><span>{records.length} 条对话</span></div>
+    <div className="town-dialogues-update"><span>{newCount ? `${newCount} 条新对话已到达` : '阅读中，列表保持静止'}</span><button disabled={!newCount} onClick={() => { setCutoff(Date.now()); listRef.current?.scrollTo({ top: 0 }); }}>查看最新 <ArrowUpRight size={12} /></button></div>
+    <div className={`town-dialogue-workspace ${mobileDetail && selected ? 'show-detail' : ''}`}>
+      <div ref={listRef} className="town-dialogue-list" aria-label="对话列表">{records.slice(0, limit).map(record => <button key={record.id} className={`town-dialogue-row ${selected?.id === record.id ? 'selected' : ''}`} aria-label={`阅读对话：${record.topic}`} aria-pressed={selected?.id === record.id} onClick={() => select(record.id)}><div><time>第 {record.simDay} 天 · {record.simTime}</time><span className={`town-status tone-${record.sentiment}`}>{sentiments[record.sentiment]}</span></div><h3>{record.topic}</h3><p>{record.summary}</p><small>{record.participantNames.join(' × ')}<span>{record.location}</span></small></button>)}{records.length > limit && <button className="town-load-more" onClick={() => setLimit(value => value + 40)}>继续查看较早对话</button>}{!records.length && <div className="town-empty"><MessageSquare size={25} /><p>没有符合条件的对话</p><small>调整筛选，或在小镇中发起一次交谈。</small></div>}</div>
+      <div ref={detailRef} className="town-dialogue-detail" aria-label="对话详情">{selected ? <>
+        <button className="town-dialogue-back" onClick={() => setMobileDetail(false)}><ArrowLeft size={15} />返回对话列表</button>
+        <div className="town-dialogue-detail-heading"><span className={`town-status tone-${selected.sentiment}`}>{sentiments[selected.sentiment]}</span><time>第 {selected.simDay} 天 · {selected.simTime}</time><h3>{selected.topic}</h3><p><MapPin size={14} />{selected.location}</p></div>
+        <section className="town-dialogue-summary" aria-label="对话摘要"><span className="town-section-label">这次交流发生了什么</span><p>{selected.summary}</p><div className="town-source"><Sparkles size={12} />{generationLabel(selected.generation)}{selected.generation && <span> · 响应 {(selected.generation.latencyMs / 1000).toFixed(1)} 秒</span>}</div></section>
+        <section className="town-dialogue-outcomes" aria-label="关系变化"><span className="town-section-label">留下了什么变化</span><div>{selected.participants.map((id, index) => { const impact = selected.relationshipImpact?.[id]; return <article key={id}><button onClick={() => onSelectAgent(id)}>{selected.participantNames[index]}<ArrowUpRight size={12} /></button><p><Heart size={13} />好感 <b className={(impact?.deltaAffinity ?? 0) < 0 ? 'negative' : ''}>{impact ? `${impact.deltaAffinity > 0 ? '+' : ''}${impact.deltaAffinity}` : '未记录'}</b></p>{impact?.note && <small>{impact.note}</small>}</article>; })}</div></section>
+        <section className="town-transcript" aria-label="对话原文"><span className="town-section-label">对话原文 · {messages.length} 句</span>{messages.map((message, index) => <article key={index} className={message.speakerId === selected.participants[0] ? 'first-speaker' : 'second-speaker'}><button onClick={() => onSelectAgent(message.speakerId)}>{message.speakerName} <ArrowUpRight size={11} /></button><p>{message.text}</p></article>)}</section>
+      </> : <div className="town-empty"><MessageSquare size={25} /><p>选择一段对话开始阅读</p></div>}</div>
     </div>
-  );
+  </div>;
 };

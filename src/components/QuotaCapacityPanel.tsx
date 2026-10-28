@@ -143,6 +143,10 @@ export const QuotaCapacityPanel: React.FC<QuotaCapacityPanelProps> = ({ onRefres
             配额超限保护
           </span>
         );
+      case 'procedural_fallback':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300">规则生成 · 未配置 AI</span>;
+      case 'api_error_fallback':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/10 text-amber-400">请求失败 · 规则备用</span>;
       default:
         return (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300">

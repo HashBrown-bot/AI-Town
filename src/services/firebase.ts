@@ -22,6 +22,8 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
+const cloudSyncDisabled = import.meta.env.VITE_DISABLE_CLOUD_SYNC === 'true';
+
 // Operation types for strict error logging per guidelines
 export enum OperationType {
   CREATE = 'create',
@@ -86,6 +88,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Connection test helper using simulation_state/current (allowed by firestore.rules)
 export async function testConnection(): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   try {
     // simulation_state/{stateId} has explicit allow get rule.
     // getDocFromServer verifies network connectivity, valid authentication, and rule permissions.
@@ -117,6 +120,7 @@ export async function testConnection(): Promise<boolean> {
 
 // Sync single interaction record to Firestore
 export async function syncInteractionToCloud(interaction: InteractionRecord): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = `interactions/${interaction.id}`;
   try {
     const payload = cleanForFirestore({
@@ -144,6 +148,7 @@ export async function syncInteractionToCloud(interaction: InteractionRecord): Pr
 
 // Sync agent current state to Firestore
 export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = `agents/${agent.id}`;
   try {
     const payload = cleanForFirestore({
@@ -184,6 +189,7 @@ export async function syncAgentStateToCloud(agent: Agent): Promise<boolean> {
 
 // Sync town event to Firestore
 export async function syncEventToCloud(event: TownEvent): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = `town_events/${event.id}`;
   try {
     const payload = cleanForFirestore({
@@ -206,6 +212,7 @@ export async function syncEventToCloud(event: TownEvent): Promise<boolean> {
 
 // Sync AI analysis report to Firestore
 export async function syncAnalysisToCloud(analysis: TownAnalysis): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = `analyses/${analysis.id}`;
   try {
     const payload = cleanForFirestore({
@@ -235,6 +242,7 @@ export async function syncSimulationStateToCloud(state: {
   simMinute: number;
   weather: string;
 }): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = 'simulation_state/current';
   try {
     const payload = cleanForFirestore({
@@ -262,6 +270,7 @@ export async function fetchSimulationStateFromCloud(): Promise<{
   weather?: string;
   updatedAt?: number;
 } | null> {
+  if (cloudSyncDisabled) return null;
   try {
     const snapshot = await getDocs(collection(db, 'simulation_state'));
     if (!snapshot.empty) {
@@ -283,6 +292,7 @@ export async function fetchSimulationStateFromCloud(): Promise<{
 
 // Fetch historical interactions from cloud
 export async function fetchCloudInteractions(): Promise<InteractionRecord[]> {
+  if (cloudSyncDisabled) return [];
   try {
     const q = query(collection(db, 'interactions'), orderBy('timestamp', 'desc'), limit(50));
     const snapshot = await getDocs(q);
@@ -299,6 +309,7 @@ export async function fetchCloudInteractions(): Promise<InteractionRecord[]> {
 
 // Fetch cloud agents
 export async function fetchCloudAgents(): Promise<Partial<Agent>[]> {
+  if (cloudSyncDisabled) return [];
   try {
     const snapshot = await getDocs(collection(db, 'agents'));
     const list: Partial<Agent>[] = [];
@@ -314,6 +325,7 @@ export async function fetchCloudAgents(): Promise<Partial<Agent>[]> {
 
 // Fetch cloud events
 export async function fetchCloudEvents(): Promise<TownEvent[]> {
+  if (cloudSyncDisabled) return [];
   try {
     const q = query(collection(db, 'town_events'), orderBy('timestamp', 'desc'), limit(20));
     const snapshot = await getDocs(q);
@@ -330,6 +342,7 @@ export async function fetchCloudEvents(): Promise<TownEvent[]> {
 
 // Fetch cloud analysis
 export async function fetchCloudAnalysis(): Promise<TownAnalysis | null> {
+  if (cloudSyncDisabled) return null;
   try {
     const q = query(collection(db, 'analyses'), orderBy('timestamp', 'desc'), limit(1));
     const snapshot = await getDocs(q);
@@ -345,6 +358,7 @@ export async function fetchCloudAnalysis(): Promise<TownAnalysis | null> {
 
 // Sync knowledge/rumor item to Firestore
 export async function syncKnowledgeToCloud(item: AgentKnowledge): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = `town_knowledge/${item.id}`;
   try {
     const payload = cleanForFirestore({
@@ -362,6 +376,7 @@ export async function syncKnowledgeToCloud(item: AgentKnowledge): Promise<boolea
 
 // Fetch cloud knowledge
 export async function fetchCloudKnowledge(): Promise<AgentKnowledge[]> {
+  if (cloudSyncDisabled) return [];
   try {
     const q = query(collection(db, 'town_knowledge'), limit(50));
     const snapshot = await getDocs(q);
@@ -378,6 +393,7 @@ export async function fetchCloudKnowledge(): Promise<AgentKnowledge[]> {
 
 // Sync global town economy state to Firestore
 export async function syncEconomyStateToCloud(economy: TownEconomyState): Promise<boolean> {
+  if (cloudSyncDisabled) return false;
   const path = 'town_economy/current';
   try {
     const payload = cleanForFirestore({
@@ -404,6 +420,7 @@ export async function syncEconomyStateToCloud(economy: TownEconomyState): Promis
 
 // Fetch town economy state from Firestore
 export async function fetchCloudEconomyState(): Promise<TownEconomyState | null> {
+  if (cloudSyncDisabled) return null;
   try {
     const snapshot = await getDocs(collection(db, 'town_economy'));
     if (!snapshot.empty) {
@@ -471,7 +488,7 @@ export async function fetchFirestoreCapacityMetrics(): Promise<FirestoreCapacity
   let analysesCount = 0;
   let simStateCount = 0;
 
-  try {
+  if (!cloudSyncDisabled) try {
     const [snapInteractions, snapAgents, snapEvents, snapAnalyses, snapSim] = await Promise.allSettled([
       getDocs(collection(db, 'interactions')),
       getDocs(collection(db, 'agents')),
